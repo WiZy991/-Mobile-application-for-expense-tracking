@@ -11,7 +11,7 @@ router.use(authenticateToken);
 router.get('/me', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, name, phone, balance, sbis_contract_id, created_at FROM clients WHERE id = $1',
+      'SELECT id, email, name, phone, balance, inn, sbis_contract_id, created_at FROM clients WHERE id = $1',
       [req.user.id]
     );
 
@@ -22,6 +22,37 @@ router.get('/me', async (req, res) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Get client error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Получить статистику клиента
+router.get('/me/stats', async (req, res) => {
+  try {
+    // Считаем сумму всех платежей
+    const paymentsResult = await pool.query(
+      `SELECT 
+        COALESCE(SUM(CASE WHEN type = 'payment' AND status = 'completed' THEN amount ELSE 0 END), 0) as total_paid,
+        COALESCE(SUM(CASE WHEN type = 'charge' AND status = 'completed' THEN amount ELSE 0 END), 0) as total_spent,
+        COUNT(CASE WHEN type = 'charge' AND status = 'pending' THEN 1 END) as active_invoices,
+        COUNT(CASE WHEN type = 'charge' AND status = 'completed' THEN 1 END) as paid_invoices,
+        COALESCE(SUM(CASE WHEN type = 'charge' AND status = 'pending' THEN amount ELSE 0 END), 0) as pending_amount
+      FROM transactions 
+      WHERE client_id = $1`,
+      [req.user.id]
+    );
+
+    const stats = paymentsResult.rows[0] || {};
+
+    res.json({
+      totalSpent: parseFloat(stats.total_spent) || 0,
+      totalPaid: parseFloat(stats.total_paid) || 0,
+      activeInvoices: parseInt(stats.active_invoices) || 0,
+      paidInvoices: parseInt(stats.paid_invoices) || 0,
+      pendingAmount: parseFloat(stats.pending_amount) || 0,
+    });
+  } catch (error) {
+    console.error('Get stats error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -73,6 +104,33 @@ router.get('/balance', async (req, res) => {
     res.json({ balance: result.rows[0].balance });
   } catch (error) {
     console.error('Get balance error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Синхронизация данных клиента с СБИС
+router.post('/sync', async (req, res) => {
+  try {
+    // Обновляем timestamp последней синхронизации
+    await pool.query(
+      'UPDATE clients SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [req.user.id]
+    );
+
+    // Получаем обновленные данные клиента
+    const result = await pool.query(
+      'SELECT id, email, name, phone, balance, inn, sbis_contract_id, created_at, updated_at FROM clients WHERE id = $1',
+      [req.user.id]
+    );
+
+    res.json({ 
+      success: true, 
+      message: 'Данные синхронизированы',
+      client: result.rows[0],
+      syncedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Sync client error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

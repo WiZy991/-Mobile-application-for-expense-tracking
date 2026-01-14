@@ -48,10 +48,24 @@ async function createTables() {
         name VARCHAR(255) NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
         balance DECIMAL(12, 2) DEFAULT 0.00,
+        inn VARCHAR(12),
+        kpp VARCHAR(9),
+        ogrn VARCHAR(15),
+        company_address TEXT,
         sbis_contract_id VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Добавляем колонку inn если её нет (для существующих БД)
+    await client.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'clients' AND column_name = 'inn') THEN
+          ALTER TABLE clients ADD COLUMN inn VARCHAR(12);
+        END IF;
+      END $$;
     `);
 
     // Таблица услуг
@@ -126,15 +140,60 @@ async function createTables() {
       )
     `);
 
+    // Таблица кэша контрагентов из СБИС CRM
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sbis_contractors (
+        id SERIAL PRIMARY KEY,
+        sbis_id VARCHAR(100) UNIQUE NOT NULL,
+        inn VARCHAR(12) NOT NULL,
+        kpp VARCHAR(9),
+        ogrn VARCHAR(15),
+        name VARCHAR(500),
+        short_name VARCHAR(255),
+        full_name VARCHAR(500),
+        address TEXT,
+        legal_address TEXT,
+        phone VARCHAR(50),
+        email VARCHAR(255),
+        director VARCHAR(255),
+        deals_count INTEGER DEFAULT 0,
+        documents_count INTEGER DEFAULT 0,
+        total_amount DECIMAL(15, 2) DEFAULT 0.00,
+        last_sync_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Таблица сделок из СБИС CRM (кэш)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sbis_deals (
+        id SERIAL PRIMARY KEY,
+        sbis_id VARCHAR(100) UNIQUE NOT NULL,
+        contractor_id INTEGER REFERENCES sbis_contractors(id) ON DELETE CASCADE,
+        theme_id VARCHAR(100),
+        theme_name VARCHAR(255),
+        amount DECIMAL(15, 2),
+        status VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Индексы для оптимизации
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_clients_email ON clients(email);
+      CREATE INDEX IF NOT EXISTS idx_clients_inn ON clients(inn);
       CREATE INDEX IF NOT EXISTS idx_transactions_client_id ON transactions(client_id);
       CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at);
       CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
       CREATE INDEX IF NOT EXISTS idx_client_services_client_id ON client_services(client_id);
       CREATE INDEX IF NOT EXISTS idx_notifications_client_id ON notifications(client_id);
       CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+      CREATE INDEX IF NOT EXISTS idx_sbis_contractors_inn ON sbis_contractors(inn);
+      CREATE INDEX IF NOT EXISTS idx_sbis_contractors_sbis_id ON sbis_contractors(sbis_id);
+      CREATE INDEX IF NOT EXISTS idx_sbis_deals_contractor_id ON sbis_deals(contractor_id);
+      CREATE INDEX IF NOT EXISTS idx_sbis_deals_sbis_id ON sbis_deals(sbis_id);
     `);
 
     await client.query('COMMIT');

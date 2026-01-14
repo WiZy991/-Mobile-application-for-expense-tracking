@@ -17,6 +17,7 @@ app.use('/api/services', require('./routes/services'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/sbis', require('./routes/sbis'));
+app.use('/api/sbis-proxy', require('./routes/sbisProxy')); // СБИС прокси для мобильного приложения
 app.use('/api/notifications', require('./routes/notifications'));
 
 // Health check

@@ -11,7 +11,8 @@ router.post('/register', [
   body('email').isEmail().normalizeEmail(),
   body('password').isLength({ min: 6 }),
   body('name').trim().notEmpty(),
-  body('phone').optional().trim()
+  body('phone').optional().trim(),
+  body('inn').optional().trim()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -19,22 +20,37 @@ router.post('/register', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password, name, phone } = req.body;
+    const { email, password, name, phone, inn } = req.body;
 
     // Проверяем, существует ли клиент
     const existingClient = await pool.query('SELECT id FROM clients WHERE email = $1', [email]);
     if (existingClient.rows.length > 0) {
-      return res.status(400).json({ error: 'Client with this email already exists' });
+      return res.status(400).json({ error: 'Клиент с таким email уже существует' });
     }
 
     // Хешируем пароль
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Создаём клиента
-    const result = await pool.query(
-      'INSERT INTO clients (email, password_hash, name, phone) VALUES ($1, $2, $3, $4) RETURNING id, email, name, balance',
-      [email, passwordHash, name, phone]
-    );
+    // Создаём клиента (с ИНН если передан)
+    let result;
+    try {
+      // Пробуем с ИНН (если колонка существует)
+      result = await pool.query(
+        'INSERT INTO clients (email, password_hash, name, phone, inn) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, name, balance',
+        [email, passwordHash, name, phone || null, inn || null]
+      );
+    } catch (dbError) {
+      // Если колонки inn нет - создаём без неё
+      if (dbError.code === '42703') { // column does not exist
+        console.log('INN column not found, creating client without INN');
+        result = await pool.query(
+          'INSERT INTO clients (email, password_hash, name, phone) VALUES ($1, $2, $3, $4) RETURNING id, email, name, balance',
+          [email, passwordHash, name, phone || null]
+        );
+      } else {
+        throw dbError;
+      }
+    }
 
     const client = result.rows[0];
 
@@ -46,7 +62,7 @@ router.post('/register', [
     );
 
     res.status(201).json({
-      message: 'Client registered successfully',
+      message: 'Регистрация успешна',
       token,
       client: {
         id: client.id,
@@ -57,7 +73,7 @@ router.post('/register', [
     });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Ошибка сервера при регистрации' });
   }
 });
 
