@@ -3,6 +3,22 @@ const express = require('express');
 const cors = require('cors');
 const { initDatabase } = require('./database/init');
 
+// Проверка обязательных переменных окружения
+if (!process.env.JWT_SECRET) {
+  console.error('❌ ОШИБКА: JWT_SECRET не установлен в переменных окружения!');
+  console.error('📝 Создайте файл .env в папке backend со следующим содержимым:');
+  console.error('');
+  console.error('JWT_SECRET=your_very_secret_jwt_key_change_this_in_production');
+  console.error('DB_HOST=localhost');
+  console.error('DB_PORT=5432');
+  console.error('DB_NAME=billing_db');
+  console.error('DB_USER=postgres');
+  console.error('DB_PASSWORD=your_password');
+  console.error('');
+  console.error('Или скопируйте .env.example в .env и заполните значения');
+  process.exit(1);
+}
+
 const app = express();
 
 // Middleware
@@ -20,8 +36,25 @@ app.use('/api/sbis', require('./routes/sbis'));
 app.use('/api/notifications', require('./routes/notifications'));
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+  try {
+    const { pool } = require('./database/init');
+    // Проверяем подключение к базе данных
+    await pool.query('SELECT NOW()');
+    res.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      database: 'connected',
+      jwtSecret: !!process.env.JWT_SECRET
+    });
+  } catch (error) {
+    res.status(503).json({ 
+      status: 'error', 
+      timestamp: new Date().toISOString(),
+      database: 'disconnected',
+      error: error.message
+    });
+  }
 });
 
 // Error handling

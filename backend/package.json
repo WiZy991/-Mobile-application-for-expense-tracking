@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "migrate": "node src/database/migrate.js"
+    "migrate": "node src/database/migrate.js",
+    "check-env": "node check-env.js"
   },
   "keywords": ["billing", "sbis", "api"],
   "author": "",
