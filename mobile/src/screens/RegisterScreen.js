@@ -35,17 +35,18 @@ export default function RegisterScreen({ navigation }) {
     setLoading(true);
     try {
       const response = await api.post('/auth/register', {
-        name,
-        email,
-        phone,
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim() || undefined, // Отправляем undefined вместо пустой строки
         password,
       });
       await signUp(response.data.token);
     } catch (error) {
-      Alert.alert(
-        'Ошибка регистрации',
-        error.response?.data?.error || 'Не удалось зарегистрироваться'
-      );
+      const errorMessage = error.response?.data?.error 
+        || error.response?.data?.errors?.map(e => e.msg || e.param).join(', ')
+        || 'Не удалось зарегистрироваться';
+      console.error('Registration error:', error.response?.data || error.message);
+      Alert.alert('Ошибка регистрации', errorMessage);
     } finally {
       setLoading(false);
     }

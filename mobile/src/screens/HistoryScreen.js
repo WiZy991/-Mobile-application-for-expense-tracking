@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { api } from '../services/api';
 import { format } from 'date-fns';
-import { ru } from 'date-fns/locale/ru';
+import ru from 'date-fns/locale/ru';
 
 export default function HistoryScreen() {
   const [transactions, setTransactions] = useState([]);
@@ -71,7 +71,9 @@ export default function HistoryScreen() {
           ]}
         >
           {item.type === 'charge' ? '-' : '+'}
-          {item.amount.toFixed(2)} ₽
+          {typeof item.amount === 'number' 
+            ? item.amount.toFixed(2) 
+            : parseFloat(item.amount || 0).toFixed(2)} ₽
         </Text>
       </View>
       <Text style={styles.transactionDescription}>{item.description}</Text>

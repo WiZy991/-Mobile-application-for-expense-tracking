@@ -27,13 +27,28 @@ export default function LoginScreen({ navigation }) {
 
     setLoading(true);
     try {
-      const response = await api.post('/auth/login', { email, password });
+      const response = await api.post('/auth/login', { 
+        email: email.trim(), 
+        password 
+      });
       await signIn(response.data.token);
     } catch (error) {
-      Alert.alert(
-        'Ошибка входа',
-        error.response?.data?.error || 'Неверный email или пароль'
-      );
+      console.error('Login error:', error.response?.data || error.message);
+      let errorMessage = 'Неверный email или пароль';
+      
+      if (error.response?.data) {
+        if (error.response.data.error) {
+          errorMessage = error.response.data.error;
+        } else if (error.response.data.errors) {
+          errorMessage = error.response.data.errors.map(e => e.msg || e.param).join(', ');
+        } else if (error.response.data.details) {
+          errorMessage = `${error.response.data.error || 'Ошибка сервера'}: ${error.response.data.details}`;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Ошибка входа', errorMessage);
     } finally {
       setLoading(false);
     }

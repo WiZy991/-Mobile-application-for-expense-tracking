@@ -53,7 +53,9 @@ export default function BalanceScreen() {
       <View style={styles.balanceCard}>
         <Text style={styles.balanceLabel}>Текущий баланс</Text>
         <Text style={styles.balanceAmount}>
-          {balance.toFixed(2)} ₽
+          {typeof balance === 'number' 
+            ? balance.toFixed(2) 
+            : parseFloat(balance || 0).toFixed(2)} ₽
         </Text>
       </View>
 

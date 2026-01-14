@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { api } from '../services/api';
 import { format } from 'date-fns';
-import { ru } from 'date-fns/locale/ru';
+import ru from 'date-fns/locale/ru';
 
 export default function ServicesScreen() {
   const [services, setServices] = useState([]);
@@ -59,7 +59,9 @@ export default function ServicesScreen() {
         <View style={styles.serviceDetail}>
           <Text style={styles.serviceDetailLabel}>Тариф</Text>
           <Text style={styles.serviceDetailValue}>
-            {item.price.toFixed(2)} ₽ / {item.billing_period === 'monthly' ? 'мес' : 'год'}
+            {typeof item.price === 'number' 
+              ? item.price.toFixed(2) 
+              : parseFloat(item.price || 0).toFixed(2)} ₽ / {item.billing_period === 'monthly' ? 'мес' : 'год'}
           </Text>
         </View>
         <View style={styles.serviceDetail}>

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { api } from '../services/api';
 import { format } from 'date-fns';
-import { ru } from 'date-fns/locale/ru';
+import ru from 'date-fns/locale/ru';
 
 export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState([]);

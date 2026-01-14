@@ -105,7 +105,9 @@ export default function AnalyticsScreen() {
       <View style={styles.summaryCard}>
         <Text style={styles.summaryLabel}>Всего потрачено за {year} год</Text>
         <Text style={styles.summaryAmount}>
-          {analytics.total.toFixed(2)} ₽
+          {typeof analytics.total === 'number' 
+            ? analytics.total.toFixed(2) 
+            : parseFloat(analytics.total || 0).toFixed(2)} ₽
         </Text>
         <Text style={styles.summaryCount}>
           {analytics.transaction_count} транзакций
@@ -147,7 +149,9 @@ export default function AnalyticsScreen() {
               </Text>
             </View>
             <Text style={styles.serviceAmount}>
-              {service.total_amount.toFixed(2)} ₽
+              {typeof service.total_amount === 'number' 
+                ? service.total_amount.toFixed(2) 
+                : parseFloat(service.total_amount || 0).toFixed(2)} ₽
             </Text>
           </View>
         ))}

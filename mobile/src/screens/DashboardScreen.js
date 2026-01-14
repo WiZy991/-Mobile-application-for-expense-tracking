@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { api } from '../services/api';
 import { format } from 'date-fns';
-import { ru } from 'date-fns/locale/ru';
+import ru from 'date-fns/locale/ru';
 
 export default function DashboardScreen({ navigation }) {
   const [client, setClient] = useState(null);
@@ -67,7 +67,9 @@ export default function DashboardScreen({ navigation }) {
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Текущий баланс</Text>
           <Text style={styles.balanceAmount}>
-            {client?.balance?.toFixed(2) || '0.00'} ₽
+            {typeof client?.balance === 'number' 
+              ? client.balance.toFixed(2) 
+              : parseFloat(client?.balance || 0).toFixed(2)} ₽
           </Text>
         </View>
       </View>
@@ -114,7 +116,9 @@ export default function DashboardScreen({ navigation }) {
                 ]}
               >
                 {transaction.type === 'charge' ? '-' : '+'}
-                {transaction.amount.toFixed(2)} ₽
+                {typeof transaction.amount === 'number' 
+                  ? transaction.amount.toFixed(2) 
+                  : parseFloat(transaction.amount || 0).toFixed(2)} ₽
               </Text>
             </View>
           ))
