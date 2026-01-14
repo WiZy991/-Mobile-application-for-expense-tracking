@@ -2,19 +2,6 @@ import { format } from 'date-fns'
 import ru from 'date-fns/locale/ru'
 import React, { useEffect, useState } from 'react'
 import {
-<<<<<<< HEAD
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
-import { api } from '../services/api';
-import { format } from 'date-fns';
-import ru from 'date-fns/locale/ru';
-=======
 	ActivityIndicator,
 	Alert,
 	Dimensions,
@@ -75,29 +62,9 @@ export default function DashboardScreen({ navigation }) {
 				)
 				setUnreadNotifications(notificationsResponse.data?.count || 0)
 			} catch (e) {
-				setUnreadNotifications(0)
-			}
+			setUnreadNotifications(0)
+		}
 
-<<<<<<< HEAD
-  return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View style={styles.header}>
-        <Text style={styles.greeting}>Добро пожаловать, {client?.name}!</Text>
-        <View style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>Текущий баланс</Text>
-          <Text style={styles.balanceAmount}>
-            {typeof client?.balance === 'number' 
-              ? client.balance.toFixed(2) 
-              : parseFloat(client?.balance || 0).toFixed(2)} ₽
-          </Text>
-        </View>
-      </View>
-=======
 			// Данные СБИС (пока статистика по транзакциям)
 			try {
 				const statsResponse = await api.get('/clients/me/stats')
@@ -135,7 +102,6 @@ export default function DashboardScreen({ navigation }) {
 			setRefreshing(false)
 		}
 	}
->>>>>>> 86fa44cdf55de05b6875cdfda4f46151993974b2
 
 	const onRefresh = () => {
 		setRefreshing(true)
@@ -157,39 +123,6 @@ export default function DashboardScreen({ navigation }) {
 		}
 	}
 
-<<<<<<< HEAD
-        {recentTransactions.length === 0 ? (
-          <Text style={styles.emptyText}>Нет транзакций</Text>
-        ) : (
-          recentTransactions.map((transaction) => (
-            <View key={transaction.id} style={styles.transactionItem}>
-              <View style={styles.transactionInfo}>
-                <Text style={styles.transactionService}>
-                  {transaction.service_name || 'Услуга'}
-                </Text>
-                <Text style={styles.transactionDate}>
-                  {format(new Date(transaction.created_at), 'dd MMM yyyy', {
-                    locale: ru,
-                  })}
-                </Text>
-              </View>
-              <Text
-                style={[
-                  styles.transactionAmount,
-                  transaction.type === 'charge' && styles.chargeAmount,
-                  transaction.type === 'payment' && styles.paymentAmount,
-                ]}
-              >
-                {transaction.type === 'charge' ? '-' : '+'}
-                {typeof transaction.amount === 'number' 
-                  ? transaction.amount.toFixed(2) 
-                  : parseFloat(transaction.amount || 0).toFixed(2)} ₽
-              </Text>
-            </View>
-          ))
-        )}
-      </View>
-=======
 	if (loading) {
 		return (
 			<View style={styles.center}>
@@ -198,7 +131,6 @@ export default function DashboardScreen({ navigation }) {
 			</View>
 		)
 	}
->>>>>>> 86fa44cdf55de05b6875cdfda4f46151993974b2
 
 	return (
 		<ScrollView

@@ -1,38 +1,4 @@
 {
-<<<<<<< HEAD
-  "expo": {
-    "name": "Billing Mobile",
-    "slug": "billing-mobile",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.billing.mobile"
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "package": "com.billing.mobile"
-    },
-    "web": {
-    },
-    "extra": {
-      "apiUrl": "http://localhost:3000/api"
-    }
-  }
-=======
 	"expo": {
 		"name": "WorldCashBox",
 		"slug": "worldcashbox",
@@ -58,12 +24,10 @@
 			"package": "com.worldcashbox.app"
 		},
 		"web": {
-			"favicon": "./assets/favicon.png"
 		},
 		"extra": {
 			"apiUrl": "http://localhost:3000/api"
 		},
 		"plugins": ["expo-notifications"]
 	}
->>>>>>> 86fa44cdf55de05b6875cdfda4f46151993974b2
 }

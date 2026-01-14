@@ -89,7 +89,6 @@ router.post('/register', [
     });
   } catch (error) {
     console.error('Registration error:', error);
-<<<<<<< HEAD
     // Более детальная информация об ошибке для отладки
     const errorMessage = process.env.NODE_ENV === 'development' 
       ? error.message 
