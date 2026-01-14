@@ -41,7 +41,6 @@ router.post('/register', [
     // Хешируем пароль
     const passwordHash = await bcrypt.hash(password, 10);
 
-<<<<<<< HEAD
     // Создаём клиента (с ИНН если передан)
     console.log('Inserting client with phone:', phoneValue, 'inn:', innValue);
     let result;
