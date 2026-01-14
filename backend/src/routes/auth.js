@@ -42,14 +42,8 @@ router.post('/register', [
     const passwordHash = await bcrypt.hash(password, 10);
 
 <<<<<<< HEAD
-    // Создаём клиента
-    console.log('Inserting client with phone:', phoneValue);
-    const result = await pool.query(
-      'INSERT INTO clients (email, password_hash, name, phone) VALUES ($1, $2, $3, $4) RETURNING id, email, name, balance',
-      [email, passwordHash, name, phoneValue]
-    );
-=======
     // Создаём клиента (с ИНН если передан)
+    console.log('Inserting client with phone:', phoneValue, 'inn:', innValue);
     let result;
     try {
       // Пробуем с ИНН (если колонка существует)
@@ -105,9 +99,6 @@ router.post('/register', [
       error: errorMessage,
       ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
     });
-=======
-    res.status(500).json({ error: 'Ошибка сервера при регистрации' });
->>>>>>> 86fa44cdf55de05b6875cdfda4f46151993974b2
   }
 });
 
