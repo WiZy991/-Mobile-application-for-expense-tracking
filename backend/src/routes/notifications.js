@@ -7,6 +7,20 @@ const router = express.Router();
 
 router.use(authenticateToken);
 
+// Получить количество непрочитанных уведомлений
+router.get('/unread/count', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT COUNT(*) as count FROM notifications WHERE client_id = $1 AND is_read = false',
+      [req.user.id]
+    );
+    res.json({ count: parseInt(result.rows[0].count) || 0 });
+  } catch (error) {
+    console.error('Get unread count error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Получить все уведомления
 router.get('/', async (req, res) => {
   try {

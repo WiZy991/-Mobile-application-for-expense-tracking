@@ -1,4 +1,31 @@
-import React from 'react';
+import React, { createContext, useState, useContext } from 'react';
 
-export const AuthContext = React.createContext();
+export const AuthContext = createContext();
 
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const value = {
+    user,
+    setUser,
+    isLoading,
+    setIsLoading,
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+export default AuthContext;

@@ -11,7 +11,8 @@ router.post('/register', [
   body('email').isEmail().normalizeEmail().withMessage('Некорректный email'),
   body('password').isLength({ min: 6 }).withMessage('Пароль должен быть не менее 6 символов'),
   body('name').trim().notEmpty().withMessage('Имя обязательно для заполнения'),
-  body('phone').optional({ checkFalsy: true }).trim().isLength({ min: 0 })
+  body('phone').optional({ checkFalsy: true }).trim().isLength({ min: 0 }),
+  body('inn').optional({ checkFalsy: true }).trim()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -24,11 +25,12 @@ router.post('/register', [
       });
     }
 
-    const { email, password, name, phone } = req.body;
-    console.log('Registration attempt for:', { email, name, hasPhone: !!phone });
+    const { email, password, name, phone, inn } = req.body;
+    console.log('Registration attempt for:', { email, name, hasPhone: !!phone, hasInn: !!inn });
     
-    // Обрабатываем пустую строку телефона как null
+    // Обрабатываем пустые строки как null
     const phoneValue = phone && phone.trim() ? phone.trim() : null;
+    const innValue = inn && inn.trim() ? inn.trim() : null;
 
     // Проверяем, существует ли клиент
     const existingClient = await pool.query('SELECT id FROM clients WHERE email = $1', [email]);
@@ -39,12 +41,34 @@ router.post('/register', [
     // Хешируем пароль
     const passwordHash = await bcrypt.hash(password, 10);
 
+<<<<<<< HEAD
     // Создаём клиента
     console.log('Inserting client with phone:', phoneValue);
     const result = await pool.query(
       'INSERT INTO clients (email, password_hash, name, phone) VALUES ($1, $2, $3, $4) RETURNING id, email, name, balance',
       [email, passwordHash, name, phoneValue]
     );
+=======
+    // Создаём клиента (с ИНН если передан)
+    let result;
+    try {
+      // Пробуем с ИНН (если колонка существует)
+      result = await pool.query(
+        'INSERT INTO clients (email, password_hash, name, phone, inn) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, name, balance',
+        [email, passwordHash, name, phoneValue, innValue]
+      );
+    } catch (dbError) {
+      // Если колонки inn нет - создаём без неё
+      if (dbError.code === '42703') { // column does not exist
+        console.log('INN column not found, creating client without INN');
+        result = await pool.query(
+          'INSERT INTO clients (email, password_hash, name, phone) VALUES ($1, $2, $3, $4) RETURNING id, email, name, balance',
+          [email, passwordHash, name, phoneValue]
+        );
+      } else {
+        throw dbError;
+      }
+    }
 
     const client = result.rows[0];
 
@@ -61,7 +85,7 @@ router.post('/register', [
     );
 
     res.status(201).json({
-      message: 'Client registered successfully',
+      message: 'Регистрация успешна',
       token,
       client: {
         id: client.id,
@@ -72,6 +96,7 @@ router.post('/register', [
     });
   } catch (error) {
     console.error('Registration error:', error);
+<<<<<<< HEAD
     // Более детальная информация об ошибке для отладки
     const errorMessage = process.env.NODE_ENV === 'development' 
       ? error.message 
@@ -80,6 +105,9 @@ router.post('/register', [
       error: errorMessage,
       ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
     });
+=======
+    res.status(500).json({ error: 'Ошибка сервера при регистрации' });
+>>>>>>> 86fa44cdf55de05b6875cdfda4f46151993974b2
   }
 });
 
