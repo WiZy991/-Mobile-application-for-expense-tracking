@@ -1,16 +1,24 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
-const { pool } = require('../database/init');
+const { dbQuery, isMySQL } = require('../database/init');
 const { sendNotification } = require('../services/notificationService');
 
 const router = express.Router();
+
+// Конвертируем MySQL TINYINT(1) в boolean для is_read
+function normalizeNotification(row) {
+  if (row && isMySQL) {
+    return { ...row, is_read: !!row.is_read };
+  }
+  return row;
+}
 
 router.use(authenticateToken);
 
 // Получить количество непрочитанных уведомлений
 router.get('/unread/count', async (req, res) => {
   try {
-    const result = await pool.query(
+    const result = await dbQuery(
       'SELECT COUNT(*) as count FROM notifications WHERE client_id = $1 AND is_read = false',
       [req.user.id]
     );
@@ -37,8 +45,8 @@ router.get('/', async (req, res) => {
     query += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1);
     params.push(parseInt(limit));
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const result = await dbQuery(query, params);
+    res.json(result.rows.map(normalizeNotification));
   } catch (error) {
     console.error('Get notifications error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -48,7 +56,7 @@ router.get('/', async (req, res) => {
 // Отметить уведомление как прочитанное
 router.put('/:id/read', async (req, res) => {
   try {
-    const result = await pool.query(
+    const result = await dbQuery(
       'UPDATE notifications SET is_read = true WHERE id = $1 AND client_id = $2 RETURNING *',
       [req.params.id, req.user.id]
     );
@@ -57,7 +65,7 @@ router.put('/:id/read', async (req, res) => {
       return res.status(404).json({ error: 'Notification not found' });
     }
 
-    res.json(result.rows[0]);
+    res.json(normalizeNotification(result.rows[0]));
   } catch (error) {
     console.error('Mark notification as read error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -67,7 +75,7 @@ router.put('/:id/read', async (req, res) => {
 // Отметить все как прочитанные
 router.put('/read-all', async (req, res) => {
   try {
-    await pool.query(
+    await dbQuery(
       'UPDATE notifications SET is_read = true WHERE client_id = $1 AND is_read = false',
       [req.user.id]
     );

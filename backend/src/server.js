@@ -1,4 +1,6 @@
-require('dotenv').config();
+// Загружаем .env файл из папки backend
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const express = require('express');
 const cors = require('cors');
 const { initDatabase } = require('./database/init');
@@ -26,6 +28,15 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Статические файлы для веб-интерфейса
+app.use(express.static('public'));
+
+// Статические файлы для загруженных файлов тикетов
+app.use('/uploads', express.static('uploads'));
+
+// Статические файлы для счетов (с авторизацией через middleware)
+app.use('/uploads/invoices', express.static('uploads/invoices'));
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/clients', require('./routes/clients'));
@@ -34,7 +45,16 @@ app.use('/api/payments', require('./routes/payments'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/sbis', require('./routes/sbis'));
 app.use('/api/sbis-proxy', require('./routes/sbisProxy')); // СБИС прокси для мобильного приложения
+app.use('/api/sbis-resources', require('./routes/sbisResources')); // API для получения ресурсов из СБИС
+app.use('/api/sbis-crm', require('./routes/sbisCRM')); // API для создания сделок в CRM СБИС
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/support', require('./routes/support'));
+app.use('/api/recommendations', require('./routes/recommendations'));
+app.use('/api/staff', require('./routes/staff'));
+app.use('/api/resources', require('./routes/resources')); // Ресурсы клиентов (ФН, лицензии)
+app.use('/api/subscriptions', require('./routes/subscriptions')); // Подписки и тарифы
+app.use('/api/stores', require('./routes/stores')); // Магазины
+app.use('/api/employees', require('./routes/employees')); // Сотрудники
 
 // Health check
 app.get('/health', async (req, res) => {
@@ -72,13 +92,17 @@ const PORT = process.env.PORT || 3000;
 
 initDatabase()
   .then(() => {
-    // Запускаем фоновые задачи
-    require('./jobs/paymentReminder');
-    require('./jobs/sbisSync');
+          // Запускаем фоновые задачи
+          require('./jobs/paymentReminder');
+          require('./jobs/sbisSync');
+          require('./jobs/resourceMonitor'); // Мониторинг ресурсов (ФН, лицензии)
+          require('./jobs/subscriptionMonitor'); // Мониторинг подписок
+          require('./jobs/sbisMessagesSync'); // Синхронизация сообщений из SBIS
     
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🌐 Server accessible at: http://192.168.0.62:${PORT}`);
     });
   })
   .catch((error) => {

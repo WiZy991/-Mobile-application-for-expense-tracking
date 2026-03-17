@@ -2,7 +2,8 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const { pool } = require('../database/init');
+const { pool, dbQuery, isMySQL } = require('../database/init');
+const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -25,15 +26,19 @@ router.post('/register', [
       });
     }
 
-    const { email, password, name, phone, inn } = req.body;
+    const { email, password, name, phone, inn, kpp, ogrn, companyAddress, sbisContractId } = req.body;
     console.log('Registration attempt for:', { email, name, hasPhone: !!phone, hasInn: !!inn });
     
     // Обрабатываем пустые строки как null
     const phoneValue = phone && phone.trim() ? phone.trim() : null;
     const innValue = inn && inn.trim() ? inn.trim() : null;
+    const kppValue = kpp && kpp.trim() ? kpp.trim() : null;
+    const ogrnValue = ogrn && ogrn.trim() ? ogrn.trim() : null;
+    const companyAddressValue = companyAddress && companyAddress.trim() ? companyAddress.trim() : null;
+    const sbisContractIdValue = sbisContractId && sbisContractId.trim() ? sbisContractId.trim() : null;
 
     // Проверяем, существует ли клиент
-    const existingClient = await pool.query('SELECT id FROM clients WHERE email = $1', [email]);
+    const existingClient = await dbQuery('SELECT id FROM clients WHERE email = $1', [email]);
     if (existingClient.rows.length > 0) {
       return res.status(400).json({ error: 'Клиент с таким email уже существует' });
     }
@@ -41,29 +46,49 @@ router.post('/register', [
     // Хешируем пароль
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Создаём клиента (с ИНН если передан)
-    console.log('Inserting client with phone:', phoneValue, 'inn:', innValue);
+    // Создаём клиента (с ИНН и данными из SBIS если передан)
+    console.log('Inserting client with phone:', phoneValue, 'inn:', innValue, 'kpp:', kppValue, 'ogrn:', ogrnValue);
     let result;
     try {
-      // Пробуем с ИНН (если колонка существует)
-      result = await pool.query(
-        'INSERT INTO clients (email, password_hash, name, phone, inn) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, name, balance',
-        [email, passwordHash, name, phoneValue, innValue]
+      // Пробуем с полными данными (если колонки существуют)
+      result = await dbQuery(
+        'INSERT INTO clients (email, password_hash, name, phone, inn, kpp, ogrn, company_address, sbis_contract_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, email, name, balance',
+        [email, passwordHash, name, phoneValue, innValue, kppValue, ogrnValue, companyAddressValue, sbisContractIdValue]
       );
+      console.log('Client inserted successfully with SBIS data:', result.rows[0]);
     } catch (dbError) {
-      // Если колонки inn нет - создаём без неё
-      if (dbError.code === '42703') { // column does not exist
-        console.log('INN column not found, creating client without INN');
-        result = await pool.query(
-          'INSERT INTO clients (email, password_hash, name, phone) VALUES ($1, $2, $3, $4) RETURNING id, email, name, balance',
-          [email, passwordHash, name, phoneValue]
-        );
+      console.error('Error inserting client with full data:', dbError.message, dbError.code);
+      // Если колонки не существуют - создаём с базовыми полями
+      if (dbError.code === '42703' || dbError.code === 'ER_BAD_FIELD_ERROR') { // column does not exist
+        console.log('Some columns not found, trying with basic fields');
+        try {
+          // Пробуем с ИНН
+          result = await dbQuery(
+            'INSERT INTO clients (email, password_hash, name, phone, inn) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, name, balance',
+            [email, passwordHash, name, phoneValue, innValue]
+          );
+          console.log('Client inserted with INN only:', result.rows[0]);
+        } catch (innError) {
+          // Если и ИНН нет - создаём без него
+          console.log('INN column not found, creating client without INN');
+          result = await dbQuery(
+            'INSERT INTO clients (email, password_hash, name, phone) VALUES ($1, $2, $3, $4) RETURNING id, email, name, balance',
+            [email, passwordHash, name, phoneValue]
+          );
+          console.log('Client inserted successfully without INN:', result.rows[0]);
+        }
       } else {
         throw dbError;
       }
     }
 
+    if (!result || !result.rows || result.rows.length === 0) {
+      console.error('Failed to insert client: no result returned');
+      return res.status(500).json({ error: 'Failed to create client' });
+    }
+
     const client = result.rows[0];
+    console.log('Created client:', { id: client.id, email: client.email, name: client.name, balance: client.balance });
 
     // Генерируем токен
     if (!process.env.JWT_SECRET) {
@@ -76,6 +101,60 @@ router.post('/register', [
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
+
+    // Автоматически синхронизируем данные из SBIS/DaData после регистрации, если есть ИНН
+    if (innValue) {
+      console.log('[Register] Запускаем автоматическую синхронизацию данных для нового клиента...');
+      console.log('[Register] ИНН клиента:', innValue);
+      
+      // Запускаем синхронизацию асинхронно, не блокируя ответ
+      setImmediate(async () => {
+        try {
+          const axios = require('axios');
+          const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
+          
+          console.log('[Register] Вызываем /api/clients/sync для получения данных из SBIS/DaData...');
+          
+          // Вызываем endpoint синхронизации с токеном нового клиента
+          const syncResponse = await axios.post(
+            `${baseUrl}/api/clients/sync`,
+            {},
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              },
+              timeout: 60000 // Увеличиваем таймаут до 60 секунд для надежности
+            }
+          );
+          
+          if (syncResponse.data && syncResponse.data.success) {
+            console.log('[Register] ✅ Автоматическая синхронизация завершена для клиента', client.id);
+            console.log('[Register] Данные синхронизированы:');
+            console.log('[Register]   - name:', syncResponse.data.client?.name || 'не указано');
+            console.log('[Register]   - companyAddress:', syncResponse.data.client?.companyAddress || 'не указано');
+            console.log('[Register]   - director:', syncResponse.data.client?.director || 'не указано');
+            console.log('[Register]   - oktmo:', syncResponse.data.client?.oktmo || 'не указано');
+            console.log('[Register]   - okpo:', syncResponse.data.client?.okpo || 'не указано');
+            console.log('[Register]   - okved:', syncResponse.data.client?.okved || 'не указано');
+            console.log('[Register]   - pfRegNumber:', syncResponse.data.client?.pfRegNumber || 'не указано');
+            console.log('[Register]   - sfrRegNumber:', syncResponse.data.client?.sfrRegNumber || 'не указано');
+            console.log('[Register]   - registrationDate:', syncResponse.data.client?.registrationDate || 'не указано');
+            console.log('[Register]   - registrationAuthority:', syncResponse.data.client?.registrationAuthority || 'не указано');
+          } else {
+            console.warn('[Register] ⚠️  Синхронизация завершена, но success=false:', syncResponse.data);
+          }
+        } catch (syncError) {
+          console.error('[Register] ⚠️  Ошибка автоматической синхронизации (не критично):', syncError.message);
+          if (syncError.response) {
+            console.error('[Register]   Status:', syncError.response.status);
+            console.error('[Register]   Response:', JSON.stringify(syncError.response.data, null, 2));
+          }
+          // Не прерываем выполнение, просто логируем ошибку
+        }
+      });
+    } else {
+      console.log('[Register] ИНН не указан, пропускаем автоматическую синхронизацию');
+    }
 
     res.status(201).json({
       message: 'Регистрация успешна',
@@ -134,7 +213,7 @@ router.post('/login', [
     // Находим клиента
     let result;
     try {
-      result = await pool.query('SELECT * FROM clients WHERE email = $1', [email]);
+      result = await dbQuery('SELECT * FROM clients WHERE email = $1', [email]);
     } catch (dbError) {
       console.error('Database query error:', dbError);
       return res.status(500).json({ 
@@ -218,6 +297,53 @@ router.post('/login', [
         name: error.name
       })
     });
+  }
+});
+
+// Изменение пароля
+router.put('/change-password', authenticateToken, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Текущий и новый пароль обязательны' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Новый пароль должен быть не менее 6 символов' });
+    }
+
+    // Получаем текущего пользователя
+    const result = await dbQuery(
+      'SELECT password_hash FROM clients WHERE id = $1',
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+
+    const client = result.rows[0];
+
+    // Проверяем текущий пароль
+    const isValidPassword = await bcrypt.compare(currentPassword, client.password_hash);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Неверный текущий пароль' });
+    }
+
+    // Хешируем новый пароль
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+
+    // Обновляем пароль
+    await dbQuery(
+      'UPDATE clients SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [newPasswordHash, req.user.id]
+    );
+
+    res.json({ success: true, message: 'Пароль успешно изменен' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

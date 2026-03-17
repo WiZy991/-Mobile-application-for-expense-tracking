@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
-const { pool } = require('../database/init');
+const { pool, dbQuery, isMySQL } = require('../database/init');
 
 const router = express.Router();
 
@@ -32,32 +32,32 @@ router.get('/', async (req, res) => {
     }
 
     // Общая статистика
-    const statsResult = await pool.query(
+    const statsResult = await dbQuery(
       `SELECT 
         COALESCE(SUM(CASE WHEN type = 'charge' AND status = 'completed' THEN amount ELSE 0 END), 0) as total_spent,
         COALESCE(SUM(CASE WHEN type = 'payment' AND status = 'completed' THEN amount ELSE 0 END), 0) as total_paid,
         COUNT(CASE WHEN type = 'charge' THEN 1 END) as invoices_count,
         COUNT(DISTINCT service_id) as services_count
       FROM transactions 
-      WHERE client_id = $1 AND created_at >= $2`,
+      WHERE client_id = ${isMySQL ? '?' : '$1'} AND created_at >= ${isMySQL ? '?' : '$2'}`,
       [req.user.id, startDate]
     );
 
-    const stats = statsResult.rows[0] || {};
+    const stats = (statsResult.rows && statsResult.rows[0]) ? statsResult.rows[0] : {};
     const totalSpent = parseFloat(stats.total_spent) || 0;
     const invoicesCount = parseInt(stats.invoices_count) || 0;
 
     // Расходы по категориям (услугам)
-    const categoryResult = await pool.query(
+    const categoryResult = await dbQuery(
       `SELECT 
         COALESCE(s.name, 'Другое') as name,
         COALESCE(SUM(t.amount), 0) as amount
       FROM transactions t
       LEFT JOIN services s ON t.service_id = s.id
-      WHERE t.client_id = $1 
+      WHERE t.client_id = ${isMySQL ? '?' : '$1'} 
         AND t.type = 'charge' 
         AND t.status = 'completed'
-        AND t.created_at >= $2
+        AND t.created_at >= ${isMySQL ? '?' : '$2'}
       GROUP BY s.name
       ORDER BY amount DESC
       LIMIT 5`,
@@ -65,7 +65,7 @@ router.get('/', async (req, res) => {
     );
 
     const colors = ['#4CAF50', '#FF9800', '#2196F3', '#9C27B0', '#607D8B'];
-    const byCategory = categoryResult.rows.map((row, index) => ({
+    const byCategory = (categoryResult.rows || []).map((row, index) => ({
       name: row.name,
       amount: parseFloat(row.amount),
       percent: totalSpent > 0 ? Math.round((parseFloat(row.amount) / totalSpent) * 100) : 0,
@@ -74,21 +74,21 @@ router.get('/', async (req, res) => {
 
     // Данные по месяцам
     const monthNames = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
-    const monthlyResult = await pool.query(
+    const monthlyResult = await dbQuery(
       `SELECT 
-        EXTRACT(MONTH FROM created_at) as month,
+        ${isMySQL ? 'MONTH(created_at)' : 'EXTRACT(MONTH FROM created_at)'} as month,
         COALESCE(SUM(amount), 0) as spent
       FROM transactions
-      WHERE client_id = $1 
+      WHERE client_id = ${isMySQL ? '?' : '$1'} 
         AND type = 'charge' 
         AND status = 'completed'
-        AND created_at >= $2
-      GROUP BY EXTRACT(MONTH FROM created_at)
+        AND created_at >= ${isMySQL ? '?' : '$2'}
+      GROUP BY ${isMySQL ? 'MONTH(created_at)' : 'EXTRACT(MONTH FROM created_at)'}
       ORDER BY month`,
       [req.user.id, startDate]
     );
 
-    const monthlyData = monthlyResult.rows.map(row => ({
+    const monthlyData = (monthlyResult.rows || []).map(row => ({
       month: monthNames[parseInt(row.month) - 1],
       spent: parseFloat(row.spent)
     }));
@@ -134,21 +134,21 @@ router.get('/yearly/:year', async (req, res) => {
     const endDate = `${year}-12-31`;
 
     // Общая сумма за год
-    const totalResult = await pool.query(
+    const totalResult = await dbQuery(
       `SELECT 
         COALESCE(SUM(amount), 0) as total,
         COUNT(*) as transaction_count
       FROM transactions
-      WHERE client_id = $1 
+      WHERE client_id = ${isMySQL ? '?' : '$1'} 
         AND type = 'charge'
         AND status = 'completed'
-        AND created_at >= $2 
-        AND created_at <= $3`,
+        AND created_at >= ${isMySQL ? '?' : '$2'} 
+        AND created_at <= ${isMySQL ? '?' : '$3'}`,
       [req.user.id, startDate, endDate]
     );
 
     // Разбивка по сервисам
-    const byServiceResult = await pool.query(
+    const byServiceResult = await dbQuery(
       `SELECT 
         s.name as service_name,
         s.code as service_code,
@@ -156,44 +156,44 @@ router.get('/yearly/:year', async (req, res) => {
         COUNT(*) as transaction_count
       FROM transactions t
       LEFT JOIN services s ON t.service_id = s.id
-      WHERE t.client_id = $1 
+      WHERE t.client_id = ${isMySQL ? '?' : '$1'} 
         AND t.type = 'charge'
         AND t.status = 'completed'
-        AND t.created_at >= $2 
-        AND t.created_at <= $3
+        AND t.created_at >= ${isMySQL ? '?' : '$2'} 
+        AND t.created_at <= ${isMySQL ? '?' : '$3'}
       GROUP BY s.id, s.name, s.code
       ORDER BY total_amount DESC`,
       [req.user.id, startDate, endDate]
     );
 
     // Разбивка по месяцам
-    const byMonthResult = await pool.query(
+    const byMonthResult = await dbQuery(
       `SELECT 
-        TO_CHAR(created_at, 'YYYY-MM') as month,
+        ${isMySQL ? "DATE_FORMAT(created_at, '%Y-%m')" : "TO_CHAR(created_at, 'YYYY-MM')"} as month,
         COALESCE(SUM(amount), 0) as total_amount,
         COUNT(*) as transaction_count
       FROM transactions
-      WHERE client_id = $1 
+      WHERE client_id = ${isMySQL ? '?' : '$1'} 
         AND type = 'charge'
         AND status = 'completed'
-        AND created_at >= $2 
-        AND created_at <= $3
-      GROUP BY TO_CHAR(created_at, 'YYYY-MM')
+        AND created_at >= ${isMySQL ? '?' : '$2'} 
+        AND created_at <= ${isMySQL ? '?' : '$3'}
+      GROUP BY ${isMySQL ? "DATE_FORMAT(created_at, '%Y-%m')" : "TO_CHAR(created_at, 'YYYY-MM')"}
       ORDER BY month`,
       [req.user.id, startDate, endDate]
     );
 
     res.json({
       year,
-      total: parseFloat(totalResult.rows[0].total),
-      transaction_count: parseInt(totalResult.rows[0].transaction_count),
-      by_service: byServiceResult.rows.map(row => ({
+      total: parseFloat((totalResult.rows && totalResult.rows[0]) ? totalResult.rows[0].total : 0),
+      transaction_count: parseInt((totalResult.rows && totalResult.rows[0]) ? totalResult.rows[0].transaction_count : 0),
+      by_service: (byServiceResult.rows || []).map(row => ({
         service_name: row.service_name || 'Другое',
         service_code: row.service_code || 'other',
         total_amount: parseFloat(row.total_amount),
         transaction_count: parseInt(row.transaction_count)
       })),
-      by_month: byMonthResult.rows.map(row => ({
+      by_month: (byMonthResult.rows || []).map(row => ({
         month: row.month,
         total_amount: parseFloat(row.total_amount),
         transaction_count: parseInt(row.transaction_count)
