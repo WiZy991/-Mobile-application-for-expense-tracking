@@ -14,10 +14,11 @@ services:
     volumes:
       # Монтируем папку с загрузками (чтобы файлы сохранялись при перезапуске)
       - ./uploads:/app/uploads
-      # Монтируем .env файл (опционально, можно использовать только env_file)
-      - ./.env:/app/.env:ro
-    depends_on:
-      - postgres
+    # Монтируем .env файл (опционально, можно использовать только env_file)
+    - ./.env:/app/.env:ro
+    # Если используете удаленную MySQL (например, на Beget), не нужен depends_on
+    # depends_on:
+    #   - postgres
     networks:
       - billing-network
     healthcheck:
@@ -27,26 +28,28 @@ services:
       retries: 3
       start_period: 40s
 
-  postgres:
-    image: postgres:15-alpine
-    container_name: billing-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${DB_NAME:-billing_db}
-      POSTGRES_USER: ${DB_USER:-billing_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-SecurePassword123}
-      PGDATA: /var/lib/postgresql/data/pgdata
-    ports:
-      - "${DB_PORT:-5432}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - billing-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-billing_user} -d ${DB_NAME:-billing_db}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # PostgreSQL (закомментировано, так как используется удаленная MySQL на Beget)
+  # Раскомментируйте, если нужна локальная PostgreSQL
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: billing-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: ${DB_NAME:-billing_db}
+  #     POSTGRES_USER: ${DB_USER:-billing_user}
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD:-SecurePassword123}
+  #     PGDATA: /var/lib/postgresql/data/pgdata
+  #   ports:
+  #     - "${DB_PORT:-5432}:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - billing-network
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-billing_user} -d ${DB_NAME:-billing_db}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
   # Nginx reverse proxy (опционально, для продакшн)
   nginx:
@@ -65,8 +68,9 @@ services:
       - billing-network
 
 volumes:
-  postgres_data:
-    driver: local
+  # Раскомментируйте, если используете локальную PostgreSQL
+  # postgres_data:
+  #   driver: local
 
 networks:
   billing-network:
