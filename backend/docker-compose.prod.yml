@@ -67,10 +67,11 @@ services:
     networks:
       - billing-network
 
-volumes:
-  # Раскомментируйте, если используете локальную PostgreSQL
-  # postgres_data:
-  #   driver: local
+# Volumes не нужны, так как используется удаленная MySQL на Beget
+# Если понадобится локальная PostgreSQL, раскомментируйте:
+# volumes:
+#   postgres_data:
+#     driver: local
 
 networks:
   billing-network:
