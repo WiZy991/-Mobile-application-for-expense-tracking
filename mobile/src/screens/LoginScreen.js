@@ -31,17 +31,42 @@ export default function LoginScreen({ navigation }) {
 
     setLoading(true);
     try {
-      const response = await api.post('/auth/login', { 
-<<<<<<< HEAD
-        email: email.trim(), 
-=======
-        email: email.trim().toLowerCase(), 
->>>>>>> 86fa44cdf55de05b6875cdfda4f46151993974b2
-        password 
-      });
-      await signIn(response.data.token);
+      // Сначала пробуем войти как клиент
+      let userType = 'client'; // По умолчанию клиент
+      let userRole = null;
+      
+      try {
+        console.log('Client login attempt:', email);
+        const clientResponse = await api.post('/auth/login', { 
+          email: email.trim().toLowerCase(), 
+          password 
+        });
+        // Сохраняем тип пользователя и входим
+        await signIn(clientResponse.data.token, 'client', null);
+        console.log('Client logged in successfully');
+        return; // Успешный вход как клиент
+      } catch (clientError) {
+        // Если не получилось войти как клиент, пробуем как сотрудник
+        console.log('Client login failed, trying staff login...');
+        
+        try {
+          console.log('Staff login attempt:', email);
+          const staffResponse = await api.post('/staff/auth', { 
+            email: email.trim().toLowerCase(), 
+            password 
+          });
+          // Сохраняем тип и роль пользователя и входим
+          const role = staffResponse.data.staff.role;
+          await signIn(staffResponse.data.token, 'staff', role);
+          console.log('Staff logged in successfully:', staffResponse.data.staff);
+          return; // Успешный вход как сотрудник
+        } catch (staffError) {
+          // Оба варианта не сработали
+          console.error('Both login attempts failed');
+          throw staffError; // Пробрасываем ошибку сотрудника
+        }
+      }
     } catch (error) {
-<<<<<<< HEAD
       console.error('Login error:', error.response?.data || error.message);
       let errorMessage = 'Неверный email или пароль';
       
@@ -57,12 +82,6 @@ export default function LoginScreen({ navigation }) {
         errorMessage = error.message;
       }
       
-=======
-      console.error('Login error:', error.response?.data);
-      const errorMessage = error.response?.data?.error || 
-                          error.response?.data?.errors?.[0]?.msg ||
-                          'Неверный email или пароль';
->>>>>>> 86fa44cdf55de05b6875cdfda4f46151993974b2
       Alert.alert('Ошибка входа', errorMessage);
     } finally {
       setLoading(false);
@@ -92,7 +111,7 @@ export default function LoginScreen({ navigation }) {
         {/* Форма входа */}
         <View style={styles.formContainer}>
           <Text style={styles.title}>Вход в систему</Text>
-          <Text style={styles.subtitle}>Личный кабинет клиента</Text>
+          <Text style={styles.subtitle}>Личный кабинет</Text>
 
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Email</Text>
@@ -339,6 +358,20 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 17,
     fontWeight: '600',
+  },
+  staffRegisterButton: {
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  staffRegisterButtonText: {
+    color: colors.textSecondary,
+    fontSize: 15,
+    fontWeight: '500',
   },
   footer: {
     marginTop: 40,

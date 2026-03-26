@@ -48,6 +48,7 @@ export const authenticate = async (login = SBIS_CONFIG.login, password = SBIS_CO
 
 /**
  * Поиск контрагента по ИНН
+ * Использует SPP API в первую очередь, затем ЭДО, затем ЕГРЮЛ
  */
 export const searchContractorByINN = async (inn) => {
   if (SBIS_CONFIG.demoMode) {
@@ -63,24 +64,33 @@ export const searchContractorByINN = async (inn) => {
   }
 
   try {
-    // Сначала авторизуемся
+    // Сначала авторизуемся (создаст сессии SPP и ЭДО если доступны)
     await authenticate();
 
+    // Используем универсальный поиск, который пробует все доступные API
     const response = await api.post('/sbis-proxy/search-contractor', {
       inn,
       userId,
     });
 
+    if (response.data.success) {
+      console.log(`✅ Контрагент найден через ${response.data.source}:`, response.data.data?.name);
     return response.data;
+    }
+
+    return { success: false, error: response.data.error || 'Контрагент не найден' };
   } catch (error) {
     console.error('Search contractor error:', error);
-    return { success: false, error: error.message };
+    return { 
+      success: false, 
+      error: error.response?.data?.error || error.message 
+    };
   }
 };
 
 /**
  * Получение информации о компании
- * Использует searchContractorByINN вместо отдельного запроса
+ * Использует searchContractorByINN который пробует SPP API, ЭДО и ЕГРЮЛ
  */
 export const getCompanyInfo = async (inn) => {
   if (SBIS_CONFIG.demoMode) {
@@ -99,15 +109,16 @@ export const getCompanyInfo = async (inn) => {
   }
 
   try {
-    // Используем search-contractor который пробует несколько методов
+    // Используем универсальный поиск, который пробует SPP API в первую очередь
     const searchResult = await searchContractorByINN(inn);
     
     if (searchResult.success && searchResult.data) {
+      console.log(`✅ Данные компании получены из ${searchResult.source || 'СБИС'}`);
       return {
         success: true,
         data: {
           name: searchResult.data.name,
-          fullName: searchResult.data.name,
+          fullName: searchResult.data.fullName || searchResult.data.name,
           inn: searchResult.data.inn || inn,
           kpp: searchResult.data.kpp,
           ogrn: searchResult.data.ogrn,
@@ -115,6 +126,7 @@ export const getCompanyInfo = async (inn) => {
           director: searchResult.data.director,
           phone: searchResult.data.phone,
           email: searchResult.data.email,
+          source: searchResult.source, // Откуда получены данные
         },
       };
     }
@@ -122,7 +134,7 @@ export const getCompanyInfo = async (inn) => {
     return { success: false, error: searchResult.error || 'Компания не найдена' };
   } catch (error) {
     console.error('Get company info error:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: error.response?.data?.error || error.message };
   }
 };
 

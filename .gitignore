@@ -26,9 +26,32 @@ Thumbs.db
 *.sublime-project
 *.sublime-workspace
 
+# Android Studio
+*.iml
+.gradle/
+local.properties
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+bin/
+gen/
+out/
+release/
+.idea/
+*.ipr
+*.iws
+.DS_Store
+build/
+captures/
+.externalNativeBuild
+.cxx/
+*.keystore
+!debug.keystore
+
 # Build outputs
 dist/
-build/
 .expo/
 .expo-shared/
 

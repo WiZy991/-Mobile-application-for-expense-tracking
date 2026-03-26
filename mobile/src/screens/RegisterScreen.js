@@ -50,31 +50,9 @@ export default function RegisterScreen({ navigation }) {
 
 	const { signUp } = useContext(AuthContext)
 
-<<<<<<< HEAD
-    setLoading(true);
-    try {
-      const response = await api.post('/auth/register', {
-        name: name.trim(),
-        email: email.trim(),
-        phone: phone.trim() || undefined, // Отправляем undefined вместо пустой строки
-        password,
-      });
-      await signUp(response.data.token);
-    } catch (error) {
-      const errorMessage = error.response?.data?.error 
-        || error.response?.data?.errors?.map(e => e.msg || e.param).join(', ')
-        || 'Не удалось зарегистрироваться';
-      console.error('Registration error:', error.response?.data || error.message);
-      Alert.alert('Ошибка регистрации', errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-=======
 	// Анимация для поиска
 	const spinValue = new Animated.Value(0)
 	const pulseValue = new Animated.Value(1)
->>>>>>> 86fa44cdf55de05b6875cdfda4f46151993974b2
 
 	useEffect(() => {
 		if (currentStep === STEPS.SEARCHING) {

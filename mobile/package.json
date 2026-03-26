@@ -28,7 +28,10 @@
     "date-fns": "^2.30.0",
     "react-native-web": "~0.19.6",
     "react-dom": "18.2.0",
-    "@expo/webpack-config": "^19.0.0"
+    "@expo/webpack-config": "^19.0.0",
+    "expo-image-picker": "~14.3.2",
+    "expo-local-authentication": "~13.6.0",
+    "@expo/vector-icons": "^13.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"

@@ -36,39 +36,25 @@ export default function BalanceScreen({ navigation }) {
 
   const loadData = async () => {
     try {
-      // Симуляция загрузки данных
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Моковые данные (будут заменены на реальные после интеграции)
-      setBalance(15000);
-      setTransactions([
-        {
-          id: 1,
-          type: 'top_up',
-          amount: 10000,
-          date: new Date(Date.now() - 86400000).toISOString(),
-          status: 'completed',
-          description: 'Пополнение баланса',
-        },
-        {
-          id: 2,
-          type: 'service',
-          amount: -5000,
-          date: new Date(Date.now() - 172800000).toISOString(),
-          status: 'completed',
-          description: 'Оплата услуги: Техподдержка',
-        },
-        {
-          id: 3,
-          type: 'top_up',
-          amount: 25000,
-          date: new Date(Date.now() - 259200000).toISOString(),
-          status: 'completed',
-          description: 'Пополнение баланса',
-        },
+      // Загружаем баланс с сервера
+      const [balanceResponse, transactionsResponse] = await Promise.all([
+        api.get('/clients/me').catch(() => ({ data: { balance: 0 } })),
+        api.get('/payments/history?limit=20').catch(() => ({ data: { transactions: [] } })),
       ]);
+
+      setBalance(parseFloat(balanceResponse.data?.balance) || 0);
+      setTransactions(transactionsResponse.data?.transactions || []);
     } catch (error) {
       console.error('Error loading balance:', error);
+      // В случае ошибки используем данные из AsyncStorage
+      try {
+        const savedBalance = await AsyncStorage.getItem('userBalance');
+        if (savedBalance) {
+          setBalance(parseFloat(savedBalance));
+        }
+      } catch (e) {
+        console.error('Error loading from storage:', e);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -113,7 +99,7 @@ export default function BalanceScreen({ navigation }) {
       let invoiceNumber = `WCB-${Date.now()}`;
       let sbisInvoiceCreated = false;
 
-      // Пробуем создать счет в СБИС
+      // Пробуем создать счет
       if (clientData?.inn) {
         try {
           const invoiceResult = await createTopUpInvoice({
@@ -127,35 +113,34 @@ export default function BalanceScreen({ navigation }) {
           if (invoiceResult.success) {
             invoiceNumber = invoiceResult.data.number;
             sbisInvoiceCreated = true;
-            console.log('Счет создан в СБИС:', invoiceNumber);
+            console.log('Счет создан:', invoiceNumber);
           }
         } catch (sbisError) {
-          console.log('Не удалось создать счет в СБИС (демо-режим):', sbisError);
+          console.log('Не удалось создать счет (демо-режим):', sbisError);
         }
       }
 
-      // Обновляем баланс (в демо-режиме - мгновенно)
-      setBalance(prev => prev + amount);
+      // Отправляем запрос на пополнение баланса на сервер
+      const topUpResponse = await api.post('/payments/topup', { amount });
       
-      // Сохраняем новый баланс
-      await AsyncStorage.setItem('userBalance', String(balance + amount));
-      
-      // Добавляем транзакцию
-      const newTransaction = {
-        id: Date.now(),
-        type: 'top_up',
-        amount: amount,
-        date: new Date().toISOString(),
-        status: 'completed',
-        description: 'Пополнение баланса',
-        invoiceNumber: invoiceNumber,
-        sbisSync: sbisInvoiceCreated,
-      };
-      setTransactions(prev => [newTransaction, ...prev]);
-
-      // Сохраняем транзакции
-      const updatedTransactions = [newTransaction, ...transactions];
-      await AsyncStorage.setItem('transactions', JSON.stringify(updatedTransactions));
+      if (topUpResponse.data.success) {
+        // Обновляем баланс из ответа сервера
+        const newBalance = parseFloat(topUpResponse.data.balance);
+        setBalance(newBalance);
+        
+        // Сохраняем новый баланс локально
+        await AsyncStorage.setItem('userBalance', String(newBalance));
+        
+        // Добавляем транзакцию из ответа сервера
+        const newTransaction = topUpResponse.data.transaction;
+        setTransactions(prev => [newTransaction, ...prev]);
+        
+        // Обновляем транзакции локально
+        const updatedTransactions = [newTransaction, ...transactions];
+        await AsyncStorage.setItem('transactions', JSON.stringify(updatedTransactions));
+      } else {
+        throw new Error('Не удалось пополнить баланс');
+      }
 
       // Анимация успеха
       Animated.sequence([
@@ -175,17 +160,33 @@ export default function BalanceScreen({ navigation }) {
       setShowTopUpModal(false);
       setTopUpAmount('');
 
+      // Перезагружаем данные для обновления баланса
+      await loadData();
+
       Alert.alert(
         '🎉 Успешно!',
         `Баланс пополнен на ${amount.toLocaleString('ru-RU')} ₽\n\n` +
         (sbisInvoiceCreated 
-          ? `В СБИС создан счет ${invoiceNumber}`
-          : `Номер операции: ${invoiceNumber}\n\n⚠️ Демо-режим: для создания счетов в СБИС настройте интеграцию`),
+          ? `Создан счет ${invoiceNumber}`
+          : `Номер операции: ${invoiceNumber}`),
         [{ text: 'Отлично!' }]
       );
     } catch (error) {
       console.error('Top up error:', error);
-      Alert.alert('Ошибка', 'Не удалось пополнить баланс. Попробуйте позже.');
+      
+      let errorMessage = 'Не удалось пополнить баланс. Попробуйте позже.';
+      
+      if (error.response?.status === 403) {
+        errorMessage = 'Ошибка авторизации. Пожалуйста, войдите в систему заново.';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Сессия истекла. Пожалуйста, войдите в систему заново.';
+      } else if (error.response?.status === 400) {
+        errorMessage = error.response.data?.error || 'Неверные данные запроса.';
+      } else if (error.code === 'ERR_NETWORK') {
+        errorMessage = 'Не удалось подключиться к серверу. Проверьте подключение к интернету.';
+      }
+      
+      Alert.alert('Ошибка', errorMessage);
     } finally {
       setProcessing(false);
     }
@@ -210,22 +211,6 @@ export default function BalanceScreen({ navigation }) {
   }
 
   return (
-<<<<<<< HEAD
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View style={styles.balanceCard}>
-        <Text style={styles.balanceLabel}>Текущий баланс</Text>
-        <Text style={styles.balanceAmount}>
-          {typeof balance === 'number' 
-            ? balance.toFixed(2) 
-            : parseFloat(balance || 0).toFixed(2)} ₽
-        </Text>
-      </View>
-=======
     <View style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -241,9 +226,6 @@ export default function BalanceScreen({ navigation }) {
         <View style={styles.balanceCard}>
           <View style={styles.balanceHeader}>
             <Text style={styles.balanceLabel}>Текущий баланс</Text>
-            <View style={styles.sbisSync}>
-              <Text style={styles.sbisSyncText}>🔄 СБИС</Text>
-            </View>
           </View>
           <Text style={[styles.balanceAmount, balance < 0 && styles.balanceNegative]}>
             {balance.toLocaleString('ru-RU')} ₽
@@ -252,19 +234,18 @@ export default function BalanceScreen({ navigation }) {
             style={styles.topUpMainButton}
             onPress={() => setShowTopUpModal(true)}
           >
-            <Text style={styles.topUpMainButtonIcon}>💳</Text>
+            <Text style={styles.topUpMainButtonIcon}>•</Text>
             <Text style={styles.topUpMainButtonText}>Пополнить баланс</Text>
           </TouchableOpacity>
         </View>
->>>>>>> 86fa44cdf55de05b6875cdfda4f46151993974b2
 
         {/* Информация */}
         <View style={styles.infoCard}>
-          <Text style={styles.infoIcon}>ℹ️</Text>
+          <Text style={styles.infoIcon}>•</Text>
           <View style={styles.infoContent}>
             <Text style={styles.infoTitle}>Как это работает?</Text>
             <Text style={styles.infoText}>
-              При пополнении баланса в СБИС автоматически формируется счет на вашу организацию. 
+              При пополнении баланса автоматически формируется счет на вашу организацию. 
               После оплаты средства зачисляются на ваш баланс.
             </Text>
           </View>
@@ -276,7 +257,7 @@ export default function BalanceScreen({ navigation }) {
           
           {transactions.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>📋</Text>
+              <Text style={styles.emptyIcon}>•</Text>
               <Text style={styles.emptyText}>Нет операций</Text>
             </View>
           ) : (
@@ -286,34 +267,34 @@ export default function BalanceScreen({ navigation }) {
                   <View
                     style={[
                       styles.transactionIcon,
-                      transaction.amount > 0 
+                      transaction.type === 'payment' || transaction.amount > 0
                         ? styles.transactionIconPositive 
                         : styles.transactionIconNegative,
                     ]}
                   >
                     <Text style={styles.transactionIconText}>
-                      {transaction.amount > 0 ? '📥' : '📤'}
+                      {transaction.type === 'payment' || transaction.amount > 0 ? '↑' : '↓'}
                     </Text>
                   </View>
                   <View style={styles.transactionInfo}>
                     <Text style={styles.transactionDescription}>
-                      {transaction.description}
+                      {transaction.description || transaction.service_name || 'Операция'}
                     </Text>
                     <Text style={styles.transactionDate}>
-                      {formatDate(transaction.date)}
+                      {formatDate(transaction.created_at || transaction.date)}
                     </Text>
                   </View>
                 </View>
                 <Text
                   style={[
                     styles.transactionAmount,
-                    transaction.amount > 0 
+                    transaction.type === 'payment' || transaction.amount > 0
                       ? styles.amountPositive 
                       : styles.amountNegative,
                   ]}
                 >
-                  {transaction.amount > 0 ? '+' : ''}
-                  {transaction.amount.toLocaleString('ru-RU')} ₽
+                  {transaction.type === 'payment' || transaction.amount > 0 ? '+' : '-'}
+                  {Math.abs(parseFloat(transaction.amount) || 0).toLocaleString('ru-RU')} ₽
                 </Text>
               </View>
             ))
@@ -394,9 +375,9 @@ export default function BalanceScreen({ navigation }) {
 
             {/* Информация о счете */}
             <View style={styles.invoiceInfo}>
-              <Text style={styles.invoiceIcon}>📄</Text>
+              <Text style={styles.invoiceIcon}>•</Text>
               <Text style={styles.invoiceText}>
-                В СБИС будет сформирован счет на сумму{' '}
+                Будет сформирован счет на сумму{' '}
                 <Text style={styles.invoiceAmount}>
                   {topUpAmount ? parseInt(topUpAmount).toLocaleString('ru-RU') : 0} ₽
                 </Text>
@@ -425,7 +406,7 @@ export default function BalanceScreen({ navigation }) {
             </TouchableOpacity>
 
             <Text style={styles.disclaimer}>
-              ⚡ Демо-режим: деньги зачисляются мгновенно
+              Демо-режим: деньги зачисляются мгновенно
             </Text>
           </View>
         </KeyboardAvoidingView>
@@ -469,17 +450,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.9)',
     fontSize: 14,
     marginRight: 10,
-  },
-  sbisSync: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  sbisSyncText: {
-    color: colors.textLight,
-    fontSize: 11,
-    fontWeight: '500',
   },
   balanceAmount: {
     color: colors.textLight,

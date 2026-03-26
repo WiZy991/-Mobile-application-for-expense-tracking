@@ -3,8 +3,9 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, BackHandler, Platform } from 'react-native';
+import { MaterialIcons, Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { AuthContext } from './src/context/AuthContext';
 import AnalyticsScreen from './src/screens/AnalyticsScreen';
@@ -15,21 +16,41 @@ import LoginScreen from './src/screens/LoginScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
+import StaffDashboardScreen from './src/screens/StaffDashboardScreen';
+import StaffAnalyticsScreen from './src/screens/StaffAnalyticsScreen';
+import StaffNotificationsScreen from './src/screens/StaffNotificationsScreen';
+import TicketDetailScreen from './src/screens/TicketDetailScreen';
+import ClientTicketDetailScreen from './src/screens/ClientTicketDetailScreen';
+import ChatScreen from './src/screens/ChatScreen';
 import SbisDiagnosticsScreen from './src/screens/SbisDiagnosticsScreen';
 import ServicesScreen from './src/screens/ServicesScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
-import { api } from './src/services/api';
+import SupportScreen from './src/screens/SupportScreen';
+import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
+import TermsScreen from './src/screens/TermsScreen';
+import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
+import MyServicesScreen from './src/screens/MyServicesScreen';
+import ResourcesScreen from './src/screens/ResourcesScreen';
+import SubscriptionsScreen from './src/screens/SubscriptionsScreen';
+import { api, sbisAuth } from './src/services/api';
+import { SBIS_CONFIG, isSbisConfigured } from './src/config/sbisConfig';
 import colors from './src/theme/colors';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 // Компонент иконки для таба
-function TabIcon({ icon, focused }) {
+function TabIcon({ iconName, iconLibrary = 'MaterialIcons', focused }) {
+  const IconComponent = iconLibrary === 'Ionicons' ? Ionicons : 
+                        iconLibrary === 'FontAwesome5' ? FontAwesome5 :
+                        iconLibrary === 'MaterialCommunityIcons' ? MaterialCommunityIcons :
+                        MaterialIcons;
   return (
-    <View style={[styles.tabIconContainer, focused && styles.tabIconContainerActive]}>
-      <Text style={styles.tabIcon}>{icon}</Text>
-    </View>
+    <IconComponent 
+      name={iconName} 
+      size={24} 
+      color={focused ? colors.primary : colors.textMuted} 
+    />
   );
 }
 
@@ -72,7 +93,7 @@ function MainTabs() {
           title: 'Главная',
           tabBarLabel: 'Главная',
           headerShown: false,
-          tabBarIcon: ({ focused }) => <TabIcon icon="🏠" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon iconName="home" focused={focused} />,
         }}
       />
       <Tab.Screen
@@ -85,7 +106,7 @@ function MainTabs() {
             backgroundColor: colors.primary,
           },
           headerTintColor: colors.textLight,
-          tabBarIcon: ({ focused }) => <TabIcon icon="🛒" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon iconName="shopping-cart" focused={focused} />,
         }}
       />
       <Tab.Screen
@@ -97,7 +118,7 @@ function MainTabs() {
             backgroundColor: colors.primary,
           },
           headerTintColor: colors.textLight,
-          tabBarIcon: ({ focused }) => <TabIcon icon="📜" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon iconName="history" focused={focused} />,
         }}
       />
       <Tab.Screen
@@ -109,7 +130,7 @@ function MainTabs() {
             backgroundColor: colors.primary,
           },
           headerTintColor: colors.textLight,
-          tabBarIcon: ({ focused }) => <TabIcon icon="🔔" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon iconName="notifications" focused={focused} />,
         }}
       />
       <Tab.Screen
@@ -121,7 +142,7 @@ function MainTabs() {
             backgroundColor: colors.primary,
           },
           headerTintColor: colors.textLight,
-          tabBarIcon: ({ focused }) => <TabIcon icon="⚙️" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon iconName="settings" focused={focused} />,
         }}
       />
     </Tab.Navigator>
@@ -144,15 +165,65 @@ function SplashScreen() {
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [userToken, setUserToken] = useState(null);
+  const [userType, setUserType] = useState(null); // 'client' или 'staff'
+  const [userRole, setUserRole] = useState(null); // 'support' (для staff)
+  const navigationRef = useRef(null);
+
+  // Обработчик кнопки "Назад" на Android
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        // Проверяем, можно ли вернуться назад в навигации
+        if (navigationRef.current?.isReady() && navigationRef.current?.canGoBack()) {
+          navigationRef.current.goBack();
+          return true; // Предотвращаем закрытие приложения
+        }
+        // Если нельзя вернуться назад, разрешаем стандартное поведение (закрытие приложения)
+        return false;
+      });
+
+      return () => backHandler.remove();
+    }
+  }, []);
 
   useEffect(() => {
-    // Проверяем сохранённый токен
+    // Проверяем сохранённый токен и тип пользователя
     const checkAuth = async () => {
       try {
         const token = await AsyncStorage.getItem('userToken');
+        const type = await AsyncStorage.getItem('userType');
+        const role = await AsyncStorage.getItem('userRole');
+        
         if (token) {
           api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
           setUserToken(token);
+          setUserType(type);
+          setUserRole(role);
+        }
+
+        // Автоматическая авторизация в СБИС при старте приложения
+        // Это обеспечит загрузку всех данных из СБИС
+        if (isSbisConfigured() && !SBIS_CONFIG.demoMode) {
+          try {
+            console.log('🔐 Автоматическая авторизация в СБИС...');
+            const sbisAuthResult = await sbisAuth(SBIS_CONFIG.login, SBIS_CONFIG.password);
+            if (sbisAuthResult.success) {
+              console.log('✅ СБИС авторизован:', {
+                online: !!sbisAuthResult.sessionId,
+                spp: !!sbisAuthResult.sppSessionId,
+              });
+            } else {
+              console.log('⚠️ СБИС авторизация не удалась:', sbisAuthResult.error);
+            }
+          } catch (sbisError) {
+            // Игнорируем ошибки сети при авторизации СБИС
+            if (sbisError.code === 'ERR_NETWORK' || sbisError.message?.includes('Network Error')) {
+              console.log('⚠️ Сервер недоступен, пропускаем авторизацию СБИС');
+            } else {
+              console.log('⚠️ Ошибка авторизации СБИС:', sbisError.message);
+            }
+            // Не блокируем запуск приложения, если СБИС недоступен
+          }
         }
       } catch (error) {
         console.error('Auth check error:', error);
@@ -168,40 +239,76 @@ export default function App() {
   }, []);
 
   const authContext = {
-    signIn: async (token) => {
+    signIn: async (token, type = 'client', role = null) => {
       try {
         await AsyncStorage.setItem('userToken', token);
+        if (type) await AsyncStorage.setItem('userType', type);
+        if (role) await AsyncStorage.setItem('userRole', role);
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         setUserToken(token);
+        setUserType(type);
+        setUserRole(role);
       } catch (error) {
         console.error('Sign in error:', error);
       }
     },
     signOut: async () => {
       try {
-        await AsyncStorage.removeItem('userToken');
+        // Очищаем все данные пользователя
+        await AsyncStorage.multiRemove([
+          'userToken',
+          'userType',
+          'userRole',
+          'userBalance',
+          'transactions',
+          'clientData'
+        ]);
         delete api.defaults.headers.common['Authorization'];
         setUserToken(null);
+        setUserType(null);
+        setUserRole(null);
+        console.log('User signed out successfully');
       } catch (error) {
         console.error('Sign out error:', error);
+        // Даже если есть ошибка, все равно очищаем токен
+        setUserToken(null);
+        setUserType(null);
+        setUserRole(null);
       }
     },
-    signUp: async (token) => {
+    signUp: async (token, type = 'client', role = null) => {
       try {
         await AsyncStorage.setItem('userToken', token);
+        if (type) await AsyncStorage.setItem('userType', type);
+        if (role) await AsyncStorage.setItem('userRole', role);
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         setUserToken(token);
+        setUserType(type);
+        setUserRole(role);
       } catch (error) {
         console.error('Sign up error:', error);
       }
     },
     logout: async () => {
       try {
-        await AsyncStorage.removeItem('userToken');
+        // Очищаем все данные пользователя
+        await AsyncStorage.multiRemove([
+          'userToken',
+          'userType',
+          'userRole',
+          'userBalance',
+          'transactions',
+          'clientData'
+        ]);
         delete api.defaults.headers.common['Authorization'];
         setUserToken(null);
+        setUserType(null);
+        setUserRole(null);
+        console.log('User logged out successfully');
       } catch (error) {
         console.error('Logout error:', error);
+        // Даже если есть ошибка, все равно очищаем токен
+        setUserToken(null);
       }
     },
   };
@@ -217,7 +324,7 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={authContext}>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         <StatusBar style={userToken ? 'light' : 'dark'} />
         <Stack.Navigator 
           screenOptions={{ 
@@ -239,6 +346,55 @@ export default function App() {
                 component={RegisterScreen}
                 options={{
                   animationTypeForReplace: 'push',
+                }}
+              />
+            </>
+          ) : userType === 'staff' ? (
+            <>
+              {/* Кабинет сотрудника (инженер поддержки) */}
+              <Stack.Screen 
+                name="StaffDashboard" 
+                component={StaffDashboardScreen}
+                initialParams={{ staffRole: 'support' }}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="StaffAnalytics"
+                component={StaffAnalyticsScreen}
+                options={{
+                  headerShown: true,
+                  title: 'Аналитика задач',
+                  headerBackTitle: 'Назад',
+                  headerStyle: {
+                    backgroundColor: colors.primary,
+                  },
+                  headerTintColor: colors.textLight,
+                  headerTitleStyle: {
+                    fontWeight: '600',
+                  },
+                }}
+              />
+              <Stack.Screen
+                name="StaffNotifications"
+                component={StaffNotificationsScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen 
+                name="TicketDetail" 
+                component={TicketDetailScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="Chat"
+                component={ChatScreen}
+                options={{
+                  headerShown: false,
                 }}
               />
             </>
@@ -298,7 +454,7 @@ export default function App() {
                 component={SbisDiagnosticsScreen}
                 options={{
                   headerShown: true,
-                  title: 'Диагностика СБИС',
+                  title: 'Диагностика API',
                   headerBackTitle: 'Назад',
                   headerStyle: {
                     backgroundColor: colors.primary,
@@ -307,6 +463,132 @@ export default function App() {
                   headerTitleStyle: {
                     fontWeight: '600',
                   },
+                }}
+              />
+              <Stack.Screen
+                name="ChangePassword"
+                component={ChangePasswordScreen}
+                options={{
+                  headerShown: true,
+                  title: 'Изменить пароль',
+                  headerBackTitle: 'Назад',
+                  headerStyle: {
+                    backgroundColor: colors.primary,
+                  },
+                  headerTintColor: colors.textLight,
+                  headerTitleStyle: {
+                    fontWeight: '600',
+                  },
+                }}
+              />
+              <Stack.Screen
+                name="Terms"
+                component={TermsScreen}
+                options={{
+                  headerShown: true,
+                  title: 'Пользовательское соглашение',
+                  headerBackTitle: 'Назад',
+                  headerStyle: {
+                    backgroundColor: colors.primary,
+                  },
+                  headerTintColor: colors.textLight,
+                  headerTitleStyle: {
+                    fontWeight: '600',
+                  },
+                }}
+              />
+              <Stack.Screen
+                name="PrivacyPolicy"
+                component={PrivacyPolicyScreen}
+                options={{
+                  headerShown: true,
+                  title: 'Политика конфиденциальности',
+                  headerBackTitle: 'Назад',
+                  headerStyle: {
+                    backgroundColor: colors.primary,
+                  },
+                  headerTintColor: colors.textLight,
+                  headerTitleStyle: {
+                    fontWeight: '600',
+                  },
+                }}
+              />
+              <Stack.Screen
+                name="MyServices"
+                component={MyServicesScreen}
+                options={{
+                  headerShown: true,
+                  title: 'Мои услуги',
+                  headerBackTitle: 'Назад',
+                  headerStyle: {
+                    backgroundColor: colors.primary,
+                  },
+                  headerTintColor: colors.textLight,
+                  headerTitleStyle: {
+                    fontWeight: '600',
+                  },
+                }}
+              />
+              <Stack.Screen
+                name="Support"
+                component={SupportScreen}
+                options={{
+                  headerShown: true,
+                  title: 'Помощь',
+                  headerBackTitle: 'Назад',
+                  headerStyle: {
+                    backgroundColor: colors.primary,
+                  },
+                  headerTintColor: colors.textLight,
+                  headerTitleStyle: {
+                    fontWeight: '600',
+                  },
+                }}
+              />
+              <Stack.Screen
+                name="Resources"
+                component={ResourcesScreen}
+                options={{
+                  headerShown: true,
+                  title: 'Мои ресурсы',
+                  headerBackTitle: 'Назад',
+                  headerStyle: {
+                    backgroundColor: colors.primary,
+                  },
+                  headerTintColor: colors.textLight,
+                  headerTitleStyle: {
+                    fontWeight: '600',
+                  },
+                }}
+              />
+              <Stack.Screen
+                name="Subscriptions"
+                component={SubscriptionsScreen}
+                options={{
+                  headerShown: true,
+                  title: 'Тарифы и подписки',
+                  headerBackTitle: 'Назад',
+                  headerStyle: {
+                    backgroundColor: colors.primary,
+                  },
+                  headerTintColor: colors.textLight,
+                  headerTitleStyle: {
+                    fontWeight: '600',
+                  },
+                }}
+              />
+              <Stack.Screen
+                name="ClientTicketDetail"
+                component={ClientTicketDetailScreen}
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="Chat"
+                component={ChatScreen}
+                options={{
+                  headerShown: false,
                 }}
               />
             </>

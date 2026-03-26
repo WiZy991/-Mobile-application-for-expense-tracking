@@ -67,7 +67,7 @@ export default function AnalyticsScreen() {
 		try {
 			await api.post('/analytics/sync')
 			await loadAnalytics()
-			Alert.alert('Синхронизация', 'Аналитика обновлена из СБИС')
+			Alert.alert('Синхронизация', 'Аналитика обновлена')
 		} catch (error) {
 			console.log('Sync error:', error.message)
 			Alert.alert('Синхронизация', 'Данные обновлены')
@@ -104,19 +104,6 @@ export default function AnalyticsScreen() {
 			? Math.max(...analytics.monthlyData.map(d => d.spent))
 			: 0
 
-<<<<<<< HEAD
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryLabel}>Всего потрачено за {year} год</Text>
-        <Text style={styles.summaryAmount}>
-          {typeof analytics.total === 'number' 
-            ? analytics.total.toFixed(2) 
-            : parseFloat(analytics.total || 0).toFixed(2)} ₽
-        </Text>
-        <Text style={styles.summaryCount}>
-          {analytics.transaction_count} транзакций
-        </Text>
-      </View>
-=======
 	return (
 		<ScrollView
 			style={styles.container}
@@ -139,11 +126,10 @@ export default function AnalyticsScreen() {
 				) : (
 					<>
 						<Text style={styles.syncButtonIcon}>🔄</Text>
-						<Text style={styles.syncButtonText}>Синхронизировать с СБИС</Text>
+						<Text style={styles.syncButtonText}>Синхронизировать</Text>
 					</>
 				)}
 			</TouchableOpacity>
->>>>>>> 86fa44cdf55de05b6875cdfda4f46151993974b2
 
 			{/* Выбор периода */}
 			<View style={styles.periodContainer}>
@@ -168,28 +154,6 @@ export default function AnalyticsScreen() {
 				))}
 			</View>
 
-<<<<<<< HEAD
-      <View style={styles.servicesCard}>
-        <Text style={styles.servicesTitle}>Расходы по услугам</Text>
-        {analytics.by_service.map((service, index) => (
-          <View key={index} style={styles.serviceItem}>
-            <View style={styles.serviceInfo}>
-              <Text style={styles.serviceName}>{service.service_name}</Text>
-              <Text style={styles.serviceCount}>
-                {service.transaction_count} транзакций
-              </Text>
-            </View>
-            <Text style={styles.serviceAmount}>
-              {typeof service.total_amount === 'number' 
-                ? service.total_amount.toFixed(2) 
-                : parseFloat(service.total_amount || 0).toFixed(2)} ₽
-            </Text>
-          </View>
-        ))}
-      </View>
-    </ScrollView>
-  );
-=======
 			{/* Главные метрики */}
 			<View style={styles.mainStats}>
 				<View style={styles.mainStatCard}>
@@ -302,13 +266,11 @@ export default function AnalyticsScreen() {
 			<View style={styles.hintCard}>
 				<Text style={styles.hintIcon}>💡</Text>
 				<Text style={styles.hintText}>
-					Данные синхронизируются с СБИС. Нажмите кнопку "Синхронизировать" для
-					обновления.
+					Нажмите кнопку "Синхронизировать" для обновления данных.
 				</Text>
 			</View>
 		</ScrollView>
 	)
->>>>>>> 86fa44cdf55de05b6875cdfda4f46151993974b2
 }
 
 const styles = StyleSheet.create({

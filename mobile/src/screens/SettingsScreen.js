@@ -9,13 +9,60 @@ import {
 	Text,
 	TouchableOpacity,
 	View,
+	Platform,
 } from 'react-native'
+import { MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons'
 import { AuthContext } from '../context/AuthContext'
 import { api } from '../services/api'
 import colors from '../theme/colors'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+// Биометрия доступна только на мобильных устройствах
+// На веб-платформе модуль не используется
+let LocalAuthentication = null
+let biometricModuleLoaded = false
+
+// Функция для безопасной загрузки модуля биометрии
+const getLocalAuthentication = () => {
+	if (Platform.OS === 'web') {
+		return null
+	}
+	
+	// Если уже пытались загрузить и не получилось
+	if (biometricModuleLoaded && LocalAuthentication === null) {
+		return null
+	}
+	
+	// Если уже загружен
+	if (LocalAuthentication) {
+		return LocalAuthentication
+	}
+	
+	// Пытаемся загрузить модуль
+	biometricModuleLoaded = true
+	try {
+		// Используем динамический require только на мобильных платформах
+		// eslint-disable-next-line
+		const module = eval('require')('expo-local-authentication')
+		LocalAuthentication = module.default || module
+		return LocalAuthentication
+	} catch (e) {
+		// Модуль недоступен - это нормально
+		LocalAuthentication = null
+		return null
+	}
+}
 
 export default function SettingsScreen({ navigation }) {
-	const { logout } = useContext(AuthContext)
+	const authContext = useContext(AuthContext)
+	const logout = authContext?.logout
+	
+	// Отладочная информация
+	useEffect(() => {
+		console.log('SettingsScreen mounted');
+		console.log('AuthContext value:', authContext);
+		console.log('Logout function:', logout, typeof logout);
+	}, [authContext, logout])
 	const [client, setClient] = useState(null)
 	const [loading, setLoading] = useState(true)
 	const [refreshing, setRefreshing] = useState(false)
@@ -25,10 +72,132 @@ export default function SettingsScreen({ navigation }) {
 	const [pushEnabled, setPushEnabled] = useState(true)
 	const [emailNotifications, setEmailNotifications] = useState(true)
 	const [biometric, setBiometric] = useState(false)
+	const [biometricAvailable, setBiometricAvailable] = useState(false)
 
 	useEffect(() => {
 		loadProfile()
+		loadSettings()
+		checkBiometricAvailability()
 	}, [])
+
+	const loadSettings = async () => {
+		try {
+			const pushSetting = await AsyncStorage.getItem('pushNotificationsEnabled')
+			const emailSetting = await AsyncStorage.getItem('emailNotificationsEnabled')
+			const biometricSetting = await AsyncStorage.getItem('biometricEnabled')
+
+			if (pushSetting !== null) {
+				setPushEnabled(pushSetting === 'true')
+			}
+			if (emailSetting !== null) {
+				setEmailNotifications(emailSetting === 'true')
+			}
+			if (biometricSetting !== null) {
+				setBiometric(biometricSetting === 'true')
+			}
+		} catch (error) {
+			console.log('Error loading settings:', error)
+		}
+	}
+
+	const checkBiometricAvailability = async () => {
+		if (Platform.OS === 'web') {
+			setBiometricAvailable(false)
+			return
+		}
+		
+		const authModule = getLocalAuthentication()
+		if (!authModule) {
+			setBiometricAvailable(false)
+			return
+		}
+		
+		try {
+			const compatible = await authModule.hasHardwareAsync()
+			const enrolled = await authModule.isEnrolledAsync()
+			setBiometricAvailable(compatible && enrolled)
+		} catch (error) {
+			console.log('Biometric check error:', error)
+			setBiometricAvailable(false)
+		}
+	}
+
+	const handlePushToggle = async (value) => {
+		setPushEnabled(value)
+		try {
+			await AsyncStorage.setItem('pushNotificationsEnabled', value.toString())
+			// Здесь можно добавить регистрацию/отмену пуш токена
+			if (value) {
+				Alert.alert('Успех', 'Push-уведомления включены')
+			} else {
+				Alert.alert('Информация', 'Push-уведомления отключены')
+			}
+		} catch (error) {
+			console.log('Error saving push setting:', error)
+		}
+	}
+
+	const handleEmailToggle = async (value) => {
+		setEmailNotifications(value)
+		try {
+			await AsyncStorage.setItem('emailNotificationsEnabled', value.toString())
+			// Здесь можно добавить обновление настроек на сервере
+		} catch (error) {
+			console.log('Error saving email setting:', error)
+		}
+	}
+
+	const handleBiometricToggle = async (value) => {
+		if (Platform.OS === 'web') {
+			Alert.alert(
+				'Недоступно',
+				'Биометрия доступна только на мобильных устройствах'
+			)
+			return
+		}
+		
+		const authModule = getLocalAuthentication()
+		if (!authModule) {
+			Alert.alert(
+				'Недоступно',
+				'Биометрия недоступна на этом устройстве'
+			)
+			return
+		}
+
+		if (value && !biometricAvailable) {
+			Alert.alert(
+				'Биометрия недоступна',
+				'На вашем устройстве не настроена биометрическая аутентификация. Настройте отпечаток пальца или Face ID в настройках устройства.'
+			)
+			return
+		}
+
+		if (value) {
+			// Проверяем биометрию перед включением
+			try {
+				const result = await authModule.authenticateAsync({
+					promptMessage: 'Подтвердите включение биометрии',
+					fallbackLabel: 'Использовать пароль',
+				})
+
+				if (result.success) {
+					setBiometric(true)
+					await AsyncStorage.setItem('biometricEnabled', 'true')
+					Alert.alert('Успех', 'Биометрия включена')
+				} else {
+					Alert.alert('Отменено', 'Биометрия не включена')
+				}
+			} catch (error) {
+				console.log('Biometric auth error:', error)
+				Alert.alert('Ошибка', 'Не удалось включить биометрию')
+			}
+		} else {
+			setBiometric(false)
+			await AsyncStorage.setItem('biometricEnabled', 'false')
+			Alert.alert('Информация', 'Биометрия отключена')
+		}
+	}
 
 	const loadProfile = async () => {
 		try {
@@ -53,7 +222,7 @@ export default function SettingsScreen({ navigation }) {
 		try {
 			await api.post('/clients/sync')
 			await loadProfile()
-			Alert.alert('Синхронизация', 'Данные успешно синхронизированы с СБИС')
+			Alert.alert('Синхронизация', 'Данные успешно синхронизированы')
 		} catch (error) {
 			console.log('Sync error:', error.message)
 			Alert.alert('Синхронизация', 'Данные обновлены')
@@ -63,15 +232,53 @@ export default function SettingsScreen({ navigation }) {
 		}
 	}
 
-	const handleLogout = () => {
-		Alert.alert('Выход из аккаунта', 'Вы уверены, что хотите выйти?', [
-			{ text: 'Отмена', style: 'cancel' },
-			{
-				text: 'Выйти',
-				style: 'destructive',
-				onPress: logout,
-			},
-		])
+	const handleLogout = async () => {
+		console.log('=== HANDLE LOGOUT CALLED ===');
+		console.log('AuthContext:', authContext);
+		console.log('Logout function:', logout, typeof logout);
+		
+		// Всегда делаем прямую очистку
+		try {
+			console.log('Step 1: Clearing AsyncStorage...');
+			await AsyncStorage.multiRemove([
+				'userToken',
+				'userBalance', 
+				'transactions', 
+				'clientData'
+			]);
+			console.log('Step 2: AsyncStorage cleared');
+			
+			console.log('Step 3: Clearing API headers...');
+			delete api.defaults.headers.common['Authorization'];
+			console.log('Step 4: API headers cleared');
+			
+			// Пробуем вызвать logout из контекста если доступен
+			if (logout && typeof logout === 'function') {
+				console.log('Step 5: Calling logout from context...');
+				await logout();
+				console.log('Step 6: Logout from context completed');
+			} else {
+				console.log('Step 5: Logout not available in context, skipping');
+			}
+			
+			// Перезагружаем приложение
+			console.log('Step 7: Reloading application...');
+			if (typeof window !== 'undefined') {
+				console.log('Step 8: Window reload...');
+				setTimeout(() => {
+					window.location.reload();
+				}, 100);
+			} else {
+				console.log('Step 8: Navigation reset...');
+				navigation.reset({
+					index: 0,
+					routes: [{ name: 'Login' }],
+				});
+			}
+		} catch (error) {
+			console.error('Logout error:', error);
+			Alert.alert('Ошибка', 'Не удалось выйти из аккаунта: ' + (error.message || 'Неизвестная ошибка'));
+		}
 	}
 
 	const formatSyncTime = date => {
@@ -88,27 +295,33 @@ export default function SettingsScreen({ navigation }) {
 
 	const MenuItem = ({
 		icon,
+		iconLibrary = 'MaterialIcons',
 		title,
 		subtitle,
 		onPress,
 		showArrow = true,
 		rightElement,
-	}) => (
-		<TouchableOpacity
-			style={styles.menuItem}
-			onPress={onPress}
-			activeOpacity={0.7}
-		>
-			<View style={styles.menuItemLeft}>
-				<Text style={styles.menuIcon}>{icon}</Text>
-				<View style={styles.menuItemContent}>
-					<Text style={styles.menuTitle}>{title}</Text>
-					{subtitle && <Text style={styles.menuSubtitle}>{subtitle}</Text>}
+	}) => {
+		const IconComponent = iconLibrary === 'Ionicons' ? Ionicons : 
+		                      iconLibrary === 'FontAwesome5' ? FontAwesome5 :
+		                      MaterialIcons;
+		return (
+			<TouchableOpacity
+				style={styles.menuItem}
+				onPress={onPress}
+				activeOpacity={0.7}
+			>
+				<View style={styles.menuItemLeft}>
+					<IconComponent name={icon} size={24} color={colors.textDark} style={styles.menuIcon} />
+					<View style={styles.menuItemContent}>
+						<Text style={styles.menuTitle}>{title}</Text>
+						{subtitle && <Text style={styles.menuSubtitle}>{subtitle}</Text>}
+					</View>
 				</View>
-			</View>
-			{rightElement || (showArrow && <Text style={styles.menuArrow}>→</Text>)}
-		</TouchableOpacity>
-	)
+				{rightElement || (showArrow && <MaterialIcons name="chevron-right" size={24} color={colors.textMuted} />)}
+			</TouchableOpacity>
+		)
+	}
 
 	const SectionHeader = ({ title }) => (
 		<Text style={styles.sectionHeader}>{title}</Text>
@@ -154,7 +367,7 @@ export default function SettingsScreen({ navigation }) {
 						</View>
 					)}
 				</View>
-				<Text style={styles.profileArrow}>→</Text>
+				<MaterialIcons name="chevron-right" size={24} color={colors.textMuted} />
 			</TouchableOpacity>
 
 			{/* Кнопка синхронизации */}
@@ -170,10 +383,10 @@ export default function SettingsScreen({ navigation }) {
 					<ActivityIndicator size='small' color={colors.textLight} />
 				) : (
 					<>
-						<Text style={styles.syncMainButtonIcon}>🔄</Text>
+						<MaterialIcons name="sync" size={24} color={colors.textLight} />
 						<View style={styles.syncMainButtonContent}>
 							<Text style={styles.syncMainButtonText}>
-								Синхронизировать с СБИС
+								Синхронизировать
 							</Text>
 							<Text style={styles.syncMainButtonSubtext}>
 								Последняя: {formatSyncTime(lastSync)}
@@ -188,25 +401,25 @@ export default function SettingsScreen({ navigation }) {
 
 			<View style={styles.section}>
 				<MenuItem
-					icon='👤'
+					icon='person'
 					title='Профиль'
 					subtitle='Личные данные и информация'
 					onPress={() => navigation.navigate('Profile')}
 				/>
 				<MenuItem
-					icon='💳'
+					icon='account-balance-wallet'
 					title='Баланс'
 					subtitle={`${Number(client?.balance || 0).toLocaleString('ru-RU')} ₽`}
 					onPress={() => navigation.navigate('Balance')}
 				/>
 				<MenuItem
-					icon='🛒'
+					icon='room-service'
 					title='Мои услуги'
 					subtitle='Активные подписки'
 					onPress={() => navigation.navigate('Services')}
 				/>
 				<MenuItem
-					icon='📜'
+					icon='history'
 					title='История операций'
 					subtitle='Все транзакции'
 					onPress={() => navigation.navigate('History')}
@@ -218,28 +431,28 @@ export default function SettingsScreen({ navigation }) {
 
 			<View style={styles.section}>
 				<MenuItem
-					icon='🔔'
+					icon='notifications'
 					title='Push-уведомления'
 					subtitle='Мгновенные уведомления'
 					showArrow={false}
 					rightElement={
 						<Switch
 							value={pushEnabled}
-							onValueChange={setPushEnabled}
+							onValueChange={handlePushToggle}
 							trackColor={{ false: colors.border, true: colors.primaryLight }}
 							thumbColor={pushEnabled ? colors.primary : colors.textMuted}
 						/>
 					}
 				/>
 				<MenuItem
-					icon='📧'
+					icon='email'
 					title='Email-уведомления'
 					subtitle='Письма о счетах и оплатах'
 					showArrow={false}
 					rightElement={
 						<Switch
 							value={emailNotifications}
-							onValueChange={setEmailNotifications}
+							onValueChange={handleEmailToggle}
 							trackColor={{ false: colors.border, true: colors.primaryLight }}
 							thumbColor={
 								emailNotifications ? colors.primary : colors.textMuted
@@ -254,21 +467,28 @@ export default function SettingsScreen({ navigation }) {
 
 			<View style={styles.section}>
 				<MenuItem
-					icon='🔐'
+					icon='lock'
 					title='Изменить пароль'
-					onPress={() => Alert.alert('Скоро', 'Функция в разработке')}
+					onPress={() => navigation.navigate('ChangePassword')}
 				/>
 				<MenuItem
-					icon='👆'
+					icon='fingerprint'
 					title='Биометрия'
-					subtitle='Вход по отпечатку или Face ID'
+					subtitle={
+						biometricAvailable
+							? 'Вход по отпечатку или Face ID'
+							: 'Недоступна на этом устройстве'
+					}
 					showArrow={false}
 					rightElement={
 						<Switch
-							value={biometric}
-							onValueChange={setBiometric}
+							value={biometric && biometricAvailable}
+							onValueChange={handleBiometricToggle}
 							trackColor={{ false: colors.border, true: colors.primaryLight }}
-							thumbColor={biometric ? colors.primary : colors.textMuted}
+							thumbColor={
+								biometric && biometricAvailable ? colors.primary : colors.textMuted
+							}
+							disabled={!biometricAvailable}
 						/>
 					}
 				/>
@@ -279,8 +499,8 @@ export default function SettingsScreen({ navigation }) {
 
 			<View style={styles.section}>
 				<MenuItem
-					icon='🔗'
-					title='Диагностика СБИС API'
+					icon='api'
+					title='Диагностика API'
 					subtitle='Проверка доступных методов'
 					onPress={() => navigation.navigate('SbisDiagnostics')}
 				/>
@@ -291,27 +511,22 @@ export default function SettingsScreen({ navigation }) {
 
 			<View style={styles.section}>
 				<MenuItem
-					icon='❓'
+					icon='help-outline'
 					title='Помощь и поддержка'
-					onPress={() =>
-						Alert.alert(
-							'Поддержка',
-							'support@worldcashbox.ru\n+7 (800) 123-45-67'
-						)
-					}
+					onPress={() => navigation.navigate('Support')}
 				/>
 				<MenuItem
-					icon='📋'
+					icon='description'
 					title='Пользовательское соглашение'
-					onPress={() => Alert.alert('Скоро', 'Функция в разработке')}
+					onPress={() => navigation.navigate('Terms')}
 				/>
 				<MenuItem
-					icon='🔒'
+					icon='privacy-tip'
 					title='Политика конфиденциальности'
-					onPress={() => Alert.alert('Скоро', 'Функция в разработке')}
+					onPress={() => navigation.navigate('PrivacyPolicy')}
 				/>
 				<MenuItem
-					icon='ℹ️'
+					icon='info'
 					title='О приложении'
 					subtitle='Версия 1.0.0'
 					onPress={() =>
@@ -321,7 +536,14 @@ export default function SettingsScreen({ navigation }) {
 			</View>
 
 			{/* Выход */}
-			<TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+			<TouchableOpacity 
+				style={styles.logoutButton} 
+				onPress={() => {
+					console.log('LOGOUT BUTTON CLICKED!');
+					handleLogout();
+				}}
+				activeOpacity={0.7}
+			>
 				<Text style={styles.logoutIcon}>🚪</Text>
 				<Text style={styles.logoutText}>Выйти из аккаунта</Text>
 			</TouchableOpacity>

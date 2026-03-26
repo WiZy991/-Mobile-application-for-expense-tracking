@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">WorldCashBox</string>
+
+    <!-- Login -->
+    <string name="login_title">Вход</string>
+    <string name="email_hint">Email</string>
+    <string name="password_hint">Пароль</string>
+    <string name="login_button">Войти</string>
+    <string name="register_link">Нет аккаунта? Зарегистрироваться</string>
+
+    <!-- Dashboard -->
+    <string name="balance">Баланс</string>
+    <string name="quick_actions">Быстрые действия</string>
+    <string name="services">Услуги</string>
+    <string name="history">История</string>
+    <string name="analytics">Аналитика</string>
+    <string name="notifications">Уведомления</string>
+    <string name="recent_transactions">Последние транзакции</string>
+    <string name="top_up_balance">Пополнить баланс</string>
+
+    <!-- Menu -->
+    <string name="logout">Выход</string>
+
+    <!-- Errors -->
+    <string name="error_fill_all_fields">Заполните все поля</string>
+    <string name="error_invalid_credentials">Неверный email или пароль</string>
+    <string name="error_connection">Ошибка подключения</string>
+    <string name="error_loading_data">Ошибка загрузки данных</string>
+</resources>

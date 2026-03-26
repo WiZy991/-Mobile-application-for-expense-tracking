@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/dashboardFragment">
+
+    <fragment
+        android:id="@+id/dashboardFragment"
+        android:name="com.example.worldcashbox.ui.dashboard.DashboardFragment"
+        android:label="Главная" />
+
+    <fragment
+        android:id="@+id/servicesFragment"
+        android:name="com.example.worldcashbox.ui.services.ServicesFragment"
+        android:label="Услуги" />
+
+    <fragment
+        android:id="@+id/historyFragment"
+        android:name="com.example.worldcashbox.ui.history.HistoryFragment"
+        android:label="История" />
+
+    <fragment
+        android:id="@+id/notificationsFragment"
+        android:name="com.example.worldcashbox.ui.notifications.NotificationsFragment"
+        android:label="Уведомления" />
+
+    <fragment
+        android:id="@+id/settingsFragment"
+        android:name="com.example.worldcashbox.ui.settings.SettingsFragment"
+        android:label="Настройки" />
+
+    <activity
+        android:id="@+id/profileActivity"
+        android:name="com.example.worldcashbox.ui.profile.ProfileActivity"
+        android:label="Профиль" />
+
+    <activity
+        android:id="@+id/balanceActivity"
+        android:name="com.example.worldcashbox.ui.balance.BalanceActivity"
+        android:label="Баланс" />
+
+    <activity
+        android:id="@+id/analyticsActivity"
+        android:name="com.example.worldcashbox.ui.analytics.AnalyticsActivity"
+        android:label="Аналитика" />
+
+    <activity
+        android:id="@+id/registerActivity"
+        android:name="com.example.worldcashbox.ui.register.RegisterActivity"
+        android:label="Регистрация" />
+
+</navigation>

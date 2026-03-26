@@ -1,4 +1,4 @@
-const { pool } = require('../database/init');
+const { pool, dbQuery, isMySQL } = require('../database/init');
 const { sendNotification } = require('./notificationService');
 const { createInvoice } = require('./sbisService');
 const axios = require('axios');
@@ -17,16 +17,16 @@ async function checkSubscriptionsForRenewal() {
     renewalDate.setDate(renewalDate.getDate() + 3); // Продлеваем за 3 дня до окончания
 
     // Находим подписки, которые скоро истекают
-    const result = await pool.query(`
+    const result = await dbQuery(`
       SELECT 
         cs.*,
         sp.name as plan_name,
-        sp.price::numeric as plan_price,
+        sp.price as plan_price,
         sp.billing_period as plan_billing_period,
         c.id as client_id,
         c.name as client_name,
         c.email,
-        c.balance::numeric,
+        c.balance as balance,
         c.inn,
         c.kpp
       FROM client_subscriptions cs
@@ -58,7 +58,7 @@ async function checkSubscriptionsForRenewal() {
           }
         );
 
-        await pool.query(
+        await dbQuery(
           `INSERT INTO notifications (client_id, type, title, message, related_id, related_type)
            VALUES ($1, $2, $3, $4, $5, $6)`,
           [
@@ -84,15 +84,21 @@ async function checkSubscriptionsForRenewal() {
  * Продление подписки
  */
 async function renewSubscription(subscription) {
-  const client = await pool.connect();
+  // Транзакции отличаются в MySQL и PostgreSQL
+  const client = isMySQL ? await pool.getConnection() : await pool.connect();
   
   try {
-    await client.query('BEGIN');
+    if (isMySQL) {
+      await client.beginTransaction();
+    } else {
+      await client.query('BEGIN');
+    }
 
     // Проверяем баланс еще раз
-    const clientResult = await client.query(
+    const clientResult = await dbQuery(
       'SELECT balance FROM clients WHERE id = $1 FOR UPDATE',
-      [subscription.client_id]
+      [subscription.client_id],
+      client
     );
 
     if (clientResult.rows.length === 0) {
@@ -100,8 +106,9 @@ async function renewSubscription(subscription) {
     }
 
     const currentBalance = parseFloat(clientResult.rows[0].balance);
+    const planPrice = parseFloat(subscription.plan_price);
 
-    if (currentBalance < subscription.plan_price) {
+    if (currentBalance < planPrice) {
       throw new Error('Insufficient balance');
     }
 
@@ -137,20 +144,21 @@ async function renewSubscription(subscription) {
     );
 
     // Создаем транзакцию
-    await client.query(
+    await dbQuery(
       `INSERT INTO transactions 
        (client_id, type, amount, description, status, sbis_invoice_id)
        VALUES ($1, 'charge', $2, $3, 'completed', $4)`,
       [
         subscription.client_id,
-        subscription.plan_price,
+        planPrice,
         `Автоматическое продление подписки: ${subscription.plan_name}`,
         null
-      ]
+      ],
+      client
     );
 
     // Обновляем подписку
-    await client.query(
+    await dbQuery(
       `UPDATE client_subscriptions
        SET 
          start_date = $1,
@@ -163,7 +171,8 @@ async function renewSubscription(subscription) {
         newEndDate.toISOString().split('T')[0],
         newNextBillingDate.toISOString().split('T')[0],
         subscription.id
-      ]
+      ],
+      client
     );
 
     // Создаем счет в СБИС (если есть ИНН)
@@ -239,12 +248,26 @@ async function renewSubscription(subscription) {
       ]
     );
 
-    await client.query('COMMIT');
+    if (isMySQL) {
+      await client.commit();
+    } else {
+      await client.query('COMMIT');
+    }
   } catch (error) {
-    await client.query('ROLLBACK');
+    try {
+      if (isMySQL) {
+        await client.rollback();
+      } else {
+        await client.query('ROLLBACK');
+      }
+    } catch (_) {}
     throw error;
   } finally {
-    client.release();
+    if (isMySQL) {
+      client.release();
+    } else {
+      client.release();
+    }
   }
 }
 

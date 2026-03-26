@@ -12,11 +12,11 @@ import {
 	TouchableOpacity,
 	View,
 } from 'react-native'
+import { MaterialIcons, Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons'
 import { api } from '../services/api'
 import colors from '../theme/colors'
 
 const { width } = Dimensions.get('window')
->>>>>>> 86fa44cdf55de05b6875cdfda4f46151993974b2
 
 export default function DashboardScreen({ navigation }) {
 	const [client, setClient] = useState(null)
@@ -31,6 +31,30 @@ export default function DashboardScreen({ navigation }) {
 		loadData()
 	}, [])
 
+	// Обновляем данные при возврате на экран
+	useEffect(() => {
+		const unsubscribe = navigation.addListener('focus', () => {
+			loadData()
+		})
+		return unsubscribe
+	}, [navigation])
+
+	// Обновляем счетчик уведомлений периодически
+	useEffect(() => {
+		const interval = setInterval(() => {
+			// Обновляем только счетчик уведомлений
+			api.get('/notifications/unread/count')
+				.then(response => {
+					setUnreadNotifications(response.data?.count || 0)
+				})
+				.catch(() => {
+					// Игнорируем ошибки при обновлении счетчика
+				})
+		}, 30000) // Обновляем каждые 30 секунд
+
+		return () => clearInterval(interval)
+	}, [])
+
 	const loadData = async () => {
 		try {
 			// Загружаем данные клиента с сервера
@@ -39,17 +63,27 @@ export default function DashboardScreen({ navigation }) {
 
 			setClient({
 				name: clientData.name || 'Клиент',
-				email: clientData.email,
-				phone: clientData.phone,
+				email: clientData.email || '',
+				phone: clientData.phone || '',
 				balance: parseFloat(clientData.balance) || 0,
-				companyName: clientData.name,
-				inn: clientData.inn,
+				companyName: clientData.name || clientData.company_name || '',
+				inn: clientData.inn || '',
 			})
 
 			// Загружаем транзакции
 			try {
 				const transactionsResponse = await api.get('/payments/history?limit=5')
-				setRecentTransactions(transactionsResponse.data?.transactions || [])
+				const transactions = transactionsResponse.data?.transactions || []
+				// Убеждаемся, что все транзакции имеют нужные поля
+				setRecentTransactions(transactions.map(t => ({
+					id: t.id,
+					type: t.type || 'charge',
+					amount: parseFloat(t.amount) || 0,
+					description: t.description || t.service_name || 'Транзакция',
+					service_name: t.service_name || 'Услуга',
+					status: t.status || 'pending',
+					created_at: t.created_at,
+				})))
 			} catch (e) {
 				console.log('Транзакции недоступны:', e.message)
 				setRecentTransactions([])
@@ -60,21 +94,23 @@ export default function DashboardScreen({ navigation }) {
 				const notificationsResponse = await api.get(
 					'/notifications/unread/count'
 				)
-				setUnreadNotifications(notificationsResponse.data?.count || 0)
+				setUnreadNotifications(parseInt(notificationsResponse.data?.count) || 0)
 			} catch (e) {
-			setUnreadNotifications(0)
-		}
+				console.log('Уведомления недоступны:', e.message)
+				setUnreadNotifications(0)
+			}
 
-			// Данные СБИС (пока статистика по транзакциям)
+			// Статистика по транзакциям
 			try {
 				const statsResponse = await api.get('/clients/me/stats')
 				setSbisData({
-					totalSpent: statsResponse.data?.totalSpent || 0,
-					activeInvoices: statsResponse.data?.activeInvoices || 0,
-					paidInvoices: statsResponse.data?.paidInvoices || 0,
-					pendingAmount: statsResponse.data?.pendingAmount || 0,
+					totalSpent: parseFloat(statsResponse.data?.totalSpent) || 0,
+					activeInvoices: parseInt(statsResponse.data?.activeInvoices) || 0,
+					paidInvoices: parseInt(statsResponse.data?.paidInvoices) || 0,
+					pendingAmount: parseFloat(statsResponse.data?.pendingAmount) || 0,
 				})
 			} catch (e) {
+				console.log('Статистика недоступна:', e.message)
 				setSbisData({
 					totalSpent: 0,
 					activeInvoices: 0,
@@ -88,7 +124,10 @@ export default function DashboardScreen({ navigation }) {
 			setClient({
 				name: 'Клиент',
 				email: '',
+				phone: '',
 				balance: 0,
+				companyName: '',
+				inn: '',
 			})
 			setSbisData({
 				totalSpent: 0,
@@ -97,6 +136,7 @@ export default function DashboardScreen({ navigation }) {
 				pendingAmount: 0,
 			})
 			setRecentTransactions([])
+			setUnreadNotifications(0)
 		} finally {
 			setLoading(false)
 			setRefreshing(false)
@@ -113,7 +153,7 @@ export default function DashboardScreen({ navigation }) {
 		try {
 			await api.post('/clients/sync')
 			await loadData()
-			Alert.alert('Синхронизация', 'Данные успешно обновлены из СБИС')
+			Alert.alert('Синхронизация', 'Данные успешно обновлены')
 		} catch (error) {
 			console.log('Sync error:', error.message)
 			Alert.alert('Синхронизация', 'Данные обновлены')
@@ -165,23 +205,20 @@ export default function DashboardScreen({ navigation }) {
 				<View style={styles.balanceCard}>
 					<View style={styles.balanceHeader}>
 						<Text style={styles.balanceLabel}>Ваш баланс</Text>
-						<View style={styles.sbisLabel}>
-							<Text style={styles.sbisLabelText}>СБИС</Text>
-						</View>
 					</View>
 					<Text
 						style={[
 							styles.balanceAmount,
-							Number(client?.balance) < 0 && styles.balanceNegative,
+							Number(client?.balance || 0) < 0 && styles.balanceNegative,
 						]}
 					>
-						{client?.balance?.toLocaleString('ru-RU')} ₽
+						{(client?.balance || 0).toLocaleString('ru-RU')} ₽
 					</Text>
 					<TouchableOpacity
 						style={styles.topUpButton}
 						onPress={() => navigation.navigate('Balance')}
 					>
-						<Text style={styles.topUpButtonText}>💳 Пополнить баланс</Text>
+						<Text style={styles.topUpButtonText}>Пополнить баланс</Text>
 					</TouchableOpacity>
 				</View>
 			</View>
@@ -193,7 +230,7 @@ export default function DashboardScreen({ navigation }) {
 					onPress={() => navigation.navigate('Notifications')}
 				>
 					<View style={styles.notificationIcon}>
-						<Text style={styles.notificationIconText}>🔔</Text>
+						<Text style={styles.notificationIconText}>•</Text>
 					</View>
 					<Text style={styles.notificationText}>
 						У вас {unreadNotifications} непрочитанных уведомления
@@ -212,21 +249,21 @@ export default function DashboardScreen({ navigation }) {
 					<ActivityIndicator size='small' color={colors.textLight} />
 				) : (
 					<>
-						<Text style={styles.syncButtonIcon}>🔄</Text>
-						<Text style={styles.syncButtonText}>Синхронизировать с СБИС</Text>
+						<MaterialIcons name="sync" size={20} color={colors.textLight} />
+						<Text style={styles.syncButtonText}>Синхронизировать</Text>
 					</>
 				)}
 			</TouchableOpacity>
 
-			{/* Статистика из СБИС */}
+			{/* Статистика */}
 			<View style={styles.sbisSection}>
-				<Text style={styles.sectionTitle}>Данные из СБИС</Text>
+				<Text style={styles.sectionTitle}>Статистика</Text>
 				<View style={styles.statsGrid}>
 					<View style={styles.statCard}>
 						<View
 							style={[styles.statIcon, { backgroundColor: colors.primarySoft }]}
 						>
-							<Text style={styles.statIconText}>💰</Text>
+							<MaterialIcons name="account-balance-wallet" size={24} color={colors.primary} />
 						</View>
 						<Text style={styles.statValue}>
 							{sbisData?.totalSpent?.toLocaleString('ru-RU')} ₽
@@ -241,7 +278,7 @@ export default function DashboardScreen({ navigation }) {
 								{ backgroundColor: colors.warning + '30' },
 							]}
 						>
-							<Text style={styles.statIconText}>📄</Text>
+							<MaterialIcons name="assignment" size={24} color={colors.warning} />
 						</View>
 						<Text style={styles.statValue}>{sbisData?.activeInvoices}</Text>
 						<Text style={styles.statLabel}>Активных счетов</Text>
@@ -254,7 +291,7 @@ export default function DashboardScreen({ navigation }) {
 								{ backgroundColor: colors.success + '30' },
 							]}
 						>
-							<Text style={styles.statIconText}>✅</Text>
+							<MaterialIcons name="check" size={24} color={colors.success} />
 						</View>
 						<Text style={styles.statValue}>{sbisData?.paidInvoices}</Text>
 						<Text style={styles.statLabel}>Оплаченных</Text>
@@ -267,7 +304,7 @@ export default function DashboardScreen({ navigation }) {
 								{ backgroundColor: colors.error + '30' },
 							]}
 						>
-							<Text style={styles.statIconText}>⏳</Text>
+							<MaterialIcons name="schedule" size={24} color={colors.error} />
 						</View>
 						<Text style={styles.statValue}>
 							{sbisData?.pendingAmount?.toLocaleString('ru-RU')} ₽
@@ -288,7 +325,7 @@ export default function DashboardScreen({ navigation }) {
 
 				{recentTransactions.length === 0 ? (
 					<View style={styles.emptyState}>
-						<Text style={styles.emptyIcon}>📋</Text>
+						<MaterialIcons name="receipt" size={48} color={colors.textMuted} />
 						<Text style={styles.emptyText}>Нет операций</Text>
 					</View>
 				) : (
@@ -303,9 +340,11 @@ export default function DashboardScreen({ navigation }) {
 											: styles.transactionIconPayment,
 									]}
 								>
-									<Text style={styles.transactionIconText}>
-										{transaction.type === 'charge' ? '📤' : '📥'}
-									</Text>
+									{transaction.type === 'charge' ? (
+										<MaterialIcons name="arrow-downward" size={20} color={colors.error} />
+									) : (
+										<MaterialIcons name="arrow-upward" size={20} color={colors.success} />
+									)}
 								</View>
 								<View style={styles.transactionInfo}>
 									<Text style={styles.transactionService}>
@@ -364,7 +403,7 @@ export default function DashboardScreen({ navigation }) {
 						<View
 							style={[styles.actionIcon, { backgroundColor: colors.primary }]}
 						>
-							<Text style={styles.actionIconText}>💳</Text>
+							<MaterialIcons name="account-balance-wallet" size={24} color={colors.textLight} />
 						</View>
 						<Text style={styles.actionCardText}>Пополнить</Text>
 					</TouchableOpacity>
@@ -376,7 +415,7 @@ export default function DashboardScreen({ navigation }) {
 						<View
 							style={[styles.actionIcon, { backgroundColor: colors.warning }]}
 						>
-							<Text style={styles.actionIconText}>🛒</Text>
+							<MaterialIcons name="shopping-cart" size={24} color={colors.textLight} />
 						</View>
 						<Text style={styles.actionCardText}>Услуги</Text>
 					</TouchableOpacity>
@@ -386,7 +425,7 @@ export default function DashboardScreen({ navigation }) {
 						onPress={() => navigation.navigate('Analytics')}
 					>
 						<View style={[styles.actionIcon, { backgroundColor: colors.info }]}>
-							<Text style={styles.actionIconText}>📊</Text>
+							<MaterialIcons name="bar-chart" size={24} color={colors.textLight} />
 						</View>
 						<Text style={styles.actionCardText}>Аналитика</Text>
 					</TouchableOpacity>
@@ -401,17 +440,63 @@ export default function DashboardScreen({ navigation }) {
 								{ backgroundColor: colors.primaryDark },
 							]}
 						>
-							<Text style={styles.actionIconText}>📜</Text>
+							<MaterialIcons name="history" size={24} color={colors.textLight} />
 						</View>
 						<Text style={styles.actionCardText}>История</Text>
+					</TouchableOpacity>
+
+					<TouchableOpacity
+						style={styles.actionCard}
+						onPress={() => navigation.navigate('Resources')}
+					>
+						<View
+							style={[
+								styles.actionIcon,
+								{ backgroundColor: '#4CAF50' },
+							]}
+						>
+							<MaterialIcons name="inventory" size={24} color={colors.textLight} />
+						</View>
+						<Text style={styles.actionCardText}>Ресурсы</Text>
+					</TouchableOpacity>
+
+					<TouchableOpacity
+						style={styles.actionCard}
+						onPress={() => navigation.navigate('Subscriptions')}
+					>
+						<View
+							style={[
+								styles.actionIcon,
+								{ backgroundColor: '#9C27B0' },
+							]}
+						>
+							<MaterialIcons name="subscriptions" size={24} color={colors.textLight} />
+						</View>
+						<Text style={styles.actionCardText}>Подписки</Text>
 					</TouchableOpacity>
 				</View>
 			</View>
 
+			{/* Кнопка помощи */}
+			<TouchableOpacity
+				style={styles.helpButton}
+				onPress={() => navigation.navigate('Support')}
+			>
+				<View style={styles.helpIconContainer}>
+					<MaterialIcons name="help-outline" size={24} color={colors.primary} />
+				</View>
+				<View style={styles.helpContent}>
+					<Text style={styles.helpTitle}>Нужна помощь?</Text>
+					<Text style={styles.helpSubtitle}>
+						Свяжитесь с техподдержкой в один клик
+					</Text>
+				</View>
+				<Text style={styles.helpArrow}>→</Text>
+			</TouchableOpacity>
+
 			{/* Футер */}
 			<View style={styles.footer}>
 				<Text style={styles.footerText}>WorldCashBox © 2025</Text>
-				<Text style={styles.footerSubtext}>Данные синхронизированы с СБИС</Text>
 			</View>
 		</ScrollView>
 	)
@@ -493,17 +578,6 @@ const styles = StyleSheet.create({
 	balanceLabel: {
 		color: 'rgba(255,255,255,0.9)',
 		fontSize: 14,
-	},
-	sbisLabel: {
-		backgroundColor: 'rgba(255,255,255,0.25)',
-		paddingHorizontal: 10,
-		paddingVertical: 4,
-		borderRadius: 12,
-	},
-	sbisLabelText: {
-		color: colors.textLight,
-		fontSize: 11,
-		fontWeight: '600',
 	},
 	balanceAmount: {
 		color: colors.textLight,
@@ -793,5 +867,51 @@ const styles = StyleSheet.create({
 		fontSize: 12,
 		color: colors.textMuted,
 		marginTop: 4,
+	},
+	helpButton: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		backgroundColor: colors.backgroundWhite,
+		marginHorizontal: 16,
+		marginBottom: 16,
+		borderRadius: 16,
+		padding: 16,
+		shadowColor: colors.shadow,
+		shadowOffset: { width: 0, height: 2 },
+		shadowOpacity: 0.1,
+		shadowRadius: 8,
+		elevation: 2,
+		borderWidth: 2,
+		borderColor: colors.primary + '30',
+	},
+	helpIconContainer: {
+		width: 48,
+		height: 48,
+		borderRadius: 24,
+		backgroundColor: colors.primary + '20',
+		justifyContent: 'center',
+		alignItems: 'center',
+		marginRight: 12,
+	},
+	helpIcon: {
+		fontSize: 24,
+	},
+	helpContent: {
+		flex: 1,
+	},
+	helpTitle: {
+		fontSize: 16,
+		fontWeight: '600',
+		color: colors.textDark,
+		marginBottom: 4,
+	},
+	helpSubtitle: {
+		fontSize: 13,
+		color: colors.textMuted,
+	},
+	helpArrow: {
+		fontSize: 20,
+		color: colors.primary,
+		fontWeight: 'bold',
 	},
 })

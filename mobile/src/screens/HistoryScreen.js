@@ -2,19 +2,6 @@ import { format } from 'date-fns'
 import ru from 'date-fns/locale/ru'
 import React, { useEffect, useState } from 'react'
 import {
-<<<<<<< HEAD
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  RefreshControl,
-  ActivityIndicator,
-  TouchableOpacity,
-} from 'react-native';
-import { api } from '../services/api';
-import { format } from 'date-fns';
-import ru from 'date-fns/locale/ru';
-=======
 	ActivityIndicator,
 	Alert,
 	FlatList,
@@ -33,7 +20,6 @@ const FILTERS = [
 	{ id: 'charge', label: 'Списания' },
 	{ id: 'pending', label: 'Ожидают' },
 ]
->>>>>>> 86fa44cdf55de05b6875cdfda4f46151993974b2
 
 export default function HistoryScreen() {
 	const [transactions, setTransactions] = useState([])
@@ -57,13 +43,24 @@ export default function HistoryScreen() {
 			)
 			const data = response.data
 
+			// Форматируем транзакции для отображения
+			const formattedTransactions = (data.transactions || []).map(t => ({
+				...t,
+				amount: parseFloat(t.amount) || 0,
+				type: t.type || 'charge',
+				status: t.status || 'pending',
+				description: t.description || t.service_name || 'Операция',
+				service_name: t.service_name || 'Услуга',
+				created_at: t.created_at,
+			}))
+
 			if (pageNum === 1) {
-				setTransactions(data.transactions || [])
+				setTransactions(formattedTransactions)
 			} else {
-				setTransactions(prev => [...prev, ...(data.transactions || [])])
+				setTransactions(prev => [...prev, ...formattedTransactions])
 			}
 
-			setHasMore(data.hasMore || false)
+			setHasMore(data.pagination?.hasMore || false)
 			setLastSync(new Date())
 		} catch (error) {
 			console.log('Error loading transactions:', error.message)
@@ -83,59 +80,13 @@ export default function HistoryScreen() {
 		loadTransactions(1)
 	}
 
-<<<<<<< HEAD
-  const renderTransaction = ({ item }) => (
-    <View style={styles.transactionItem}>
-      <View style={styles.transactionHeader}>
-        <Text style={styles.transactionService}>
-          {item.service_name || 'Услуга'}
-        </Text>
-        <Text
-          style={[
-            styles.transactionAmount,
-            item.type === 'charge' && styles.chargeAmount,
-            item.type === 'payment' && styles.paymentAmount,
-          ]}
-        >
-          {item.type === 'charge' ? '-' : '+'}
-          {typeof item.amount === 'number' 
-            ? item.amount.toFixed(2) 
-            : parseFloat(item.amount || 0).toFixed(2)} ₽
-        </Text>
-      </View>
-      <Text style={styles.transactionDescription}>{item.description}</Text>
-      {item.period_start && item.period_end && (
-        <Text style={styles.transactionPeriod}>
-          Период: {format(new Date(item.period_start), 'dd.MM.yyyy', { locale: ru })} -{' '}
-          {format(new Date(item.period_end), 'dd.MM.yyyy', { locale: ru })}
-        </Text>
-      )}
-      <View style={styles.transactionFooter}>
-        <Text style={styles.transactionDate}>
-          {format(new Date(item.created_at), 'dd MMM yyyy, HH:mm', { locale: ru })}
-        </Text>
-        <View
-          style={[
-            styles.statusBadge,
-            item.status === 'completed' && styles.statusCompleted,
-            item.status === 'pending' && styles.statusPending,
-          ]}
-        >
-          <Text style={styles.statusText}>
-            {item.status === 'completed' ? 'Оплачено' : 'Ожидает'}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-=======
 	const handleSync = async () => {
 		setSyncing(true)
 		try {
-			// Запрашиваем синхронизацию с СБИС
+			// Запрашиваем синхронизацию
 			await api.post('/payments/sync')
 			await loadTransactions(1)
-			Alert.alert('Синхронизация', 'Данные успешно обновлены из СБИС')
+			Alert.alert('Синхронизация', 'Данные успешно обновлены')
 		} catch (error) {
 			console.log('Sync error:', error.message)
 			Alert.alert('Синхронизация', 'Данные обновлены')
@@ -144,7 +95,6 @@ export default function HistoryScreen() {
 			setSyncing(false)
 		}
 	}
->>>>>>> 86fa44cdf55de05b6875cdfda4f46151993974b2
 
 	const loadMore = () => {
 		if (!loading && hasMore && !refreshing) {
@@ -183,7 +133,7 @@ export default function HistoryScreen() {
 						]}
 					>
 						<Text style={styles.transactionIconText}>
-							{item.type === 'charge' ? '📤' : '📥'}
+							{item.type === 'charge' ? '↓' : '↑'}
 						</Text>
 					</View>
 					<View style={styles.transactionInfo}>
@@ -212,7 +162,7 @@ export default function HistoryScreen() {
 
 			{item.period_start && item.period_end && (
 				<View style={styles.periodContainer}>
-					<Text style={styles.periodLabel}>📅 Период:</Text>
+					<Text style={styles.periodLabel}>Период:</Text>
 					<Text style={styles.periodValue}>
 						{format(new Date(item.period_start), 'dd.MM.yyyy', { locale: ru })}{' '}
 						— {format(new Date(item.period_end), 'dd.MM.yyyy', { locale: ru })}
@@ -220,10 +170,10 @@ export default function HistoryScreen() {
 				</View>
 			)}
 
-			{item.invoice_number && (
+			{item.sbis_invoice_id && (
 				<View style={styles.invoiceContainer}>
-					<Text style={styles.invoiceLabel}>📄 Счёт:</Text>
-					<Text style={styles.invoiceValue}>{item.invoice_number}</Text>
+					<Text style={styles.invoiceLabel}>Счёт СБИС:</Text>
+					<Text style={styles.invoiceValue}>{item.sbis_invoice_id}</Text>
 				</View>
 			)}
 
@@ -244,7 +194,7 @@ export default function HistoryScreen() {
 					]}
 				>
 					<Text style={styles.statusText}>
-						{item.status === 'completed' ? '✓ Проведено' : '⏳ Ожидает'}
+						{item.status === 'completed' ? '✓ Проведено' : 'Ожидает'}
 					</Text>
 				</View>
 			</View>
@@ -272,8 +222,8 @@ export default function HistoryScreen() {
 					<ActivityIndicator size='small' color={colors.textLight} />
 				) : (
 					<>
-						<Text style={styles.syncButtonIcon}>🔄</Text>
-						<Text style={styles.syncButtonText}>Синхронизировать с СБИС</Text>
+						<Text style={styles.syncButtonIcon}>↻</Text>
+						<Text style={styles.syncButtonText}>Синхронизировать</Text>
 					</>
 				)}
 			</TouchableOpacity>
@@ -281,7 +231,7 @@ export default function HistoryScreen() {
 			{/* Статистика */}
 			<View style={styles.statsContainer}>
 				<View style={styles.statItem}>
-					<Text style={styles.statIcon}>📥</Text>
+					<Text style={styles.statIcon}>↑</Text>
 					<View>
 						<Text style={styles.statValue}>
 							+{stats.payments.toLocaleString('ru-RU')} ₽
@@ -291,7 +241,7 @@ export default function HistoryScreen() {
 				</View>
 				<View style={styles.statDivider} />
 				<View style={styles.statItem}>
-					<Text style={styles.statIcon}>📤</Text>
+					<Text style={styles.statIcon}>↓</Text>
 					<View>
 						<Text style={[styles.statValue, styles.chargeText]}>
 							-{stats.charges.toLocaleString('ru-RU')} ₽
@@ -341,7 +291,7 @@ export default function HistoryScreen() {
 				onEndReachedThreshold={0.5}
 				ListEmptyComponent={
 					<View style={styles.emptyContainer}>
-						<Text style={styles.emptyIcon}>📋</Text>
+						<Text style={styles.emptyIcon}>•</Text>
 						<Text style={styles.emptyText}>Нет операций</Text>
 						<Text style={styles.emptySubtext}>
 							{filter !== 'all'

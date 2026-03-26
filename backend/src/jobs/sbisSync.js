@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { pool } = require('../database/init');
+const { dbQuery } = require('../database/init');
 const { syncClientData, syncInvoices } = require('../services/sbisService');
 
 /**
@@ -8,7 +8,7 @@ const { syncClientData, syncInvoices } = require('../services/sbisService');
 async function syncAllClients() {
   try {
     // Получаем всех клиентов с настроенным contract_id
-    const result = await pool.query(
+    const result = await dbQuery(
       'SELECT id, sbis_contract_id FROM clients WHERE sbis_contract_id IS NOT NULL'
     );
 

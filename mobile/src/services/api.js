@@ -1,6 +1,7 @@
 import axios from 'axios';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import sbisDirectApi from './sbisApi';
 import sbisProxyApi from './sbisProxyApi';
 
@@ -21,28 +22,55 @@ export const api = axios.create({
   },
 });
 
+// Interceptor для добавления токена к каждому запросу
+api.interceptors.request.use(
+  async (config) => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      // Для FormData не устанавливаем Content-Type, axios установит его автоматически с boundary
+      if (config.data instanceof FormData) {
+        delete config.headers['Content-Type'];
+      }
+    } catch (error) {
+      console.error('Error getting token:', error);
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 // Interceptor для обработки ошибок
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Логируем ошибки для отладки
-    if (error.response) {
-      // Сервер ответил с кодом ошибки
-      console.error('API Error Response:', {
-        status: error.response.status,
-        data: error.response.data,
-        url: error.config?.url
-      });
-    } else if (error.request) {
-      // Запрос был отправлен, но ответа не получено
-      console.error('API Error Request:', {
-        message: 'No response from server',
-        url: error.config?.url,
-        baseURL: error.config?.baseURL
-      });
-    } else {
-      // Ошибка при настройке запроса
-      console.error('API Error:', error.message);
+    // Логируем ошибки для отладки (только в development)
+    if (__DEV__) {
+      if (error.response) {
+        // Сервер ответил с кодом ошибки
+        console.error('API Error Response:', {
+          status: error.response.status,
+          data: error.response.data,
+          url: error.config?.url
+        });
+      } else if (error.request) {
+        // Запрос был отправлен, но ответа не получено
+        // Не логируем ошибки сети, чтобы не засорять консоль
+        if (error.code !== 'ERR_NETWORK' && !error.message?.includes('Network Error')) {
+          console.error('API Error Request:', {
+            message: 'No response from server',
+            url: error.config?.url,
+            baseURL: error.config?.baseURL
+          });
+        }
+      } else {
+        // Ошибка при настройке запроса
+        console.error('API Error:', error.message);
+      }
     }
     
     if (error.response?.status === 401) {

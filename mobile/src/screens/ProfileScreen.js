@@ -13,9 +13,11 @@ import {
 import { AuthContext } from '../context/AuthContext'
 import { api } from '../services/api'
 import colors from '../theme/colors'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 export default function ProfileScreen({ navigation }) {
-	const { logout } = useContext(AuthContext)
+	const authContext = useContext(AuthContext)
+	const logout = authContext?.logout
 	const [loading, setLoading] = useState(true)
 	const [refreshing, setRefreshing] = useState(false)
 	const [syncing, setSyncing] = useState(false)
@@ -94,7 +96,7 @@ export default function ProfileScreen({ navigation }) {
 		try {
 			await api.post('/clients/sync')
 			await loadProfile()
-			Alert.alert('Синхронизация', 'Данные успешно обновлены из СБИС')
+			Alert.alert('Синхронизация', 'Данные успешно обновлены')
 		} catch (error) {
 			console.log('Sync error:', error.message)
 			Alert.alert('Синхронизация', 'Данные обновлены')
@@ -138,15 +140,46 @@ export default function ProfileScreen({ navigation }) {
 		}
 	}
 
-	const handleLogout = () => {
-		Alert.alert('Выход из аккаунта', 'Вы уверены, что хотите выйти?', [
-			{ text: 'Отмена', style: 'cancel' },
-			{
-				text: 'Выйти',
-				style: 'destructive',
-				onPress: logout,
-			},
-		])
+	const handleLogout = async () => {
+		console.log('=== LOGOUT BUTTON PRESSED (Profile) ===');
+		console.log('AuthContext:', authContext);
+		console.log('Logout function:', logout, typeof logout);
+		
+		try {
+			// Пробуем вызвать logout из контекста
+			if (logout && typeof logout === 'function') {
+				console.log('Calling logout from context');
+				await logout();
+				console.log('Logout completed');
+			} else {
+				console.log('Logout not available, doing direct cleanup');
+				// Прямая очистка данных
+				await AsyncStorage.multiRemove([
+					'userToken',
+					'userBalance', 
+					'transactions', 
+					'clientData'
+				]);
+				delete api.defaults.headers.common['Authorization'];
+				console.log('Data cleared');
+				
+				// Перезагружаем приложение
+				if (typeof window !== 'undefined') {
+					console.log('Reloading window...');
+					window.location.reload();
+				} else {
+					// Для React Native
+					console.log('Resetting navigation to Login...');
+					navigation.reset({
+						index: 0,
+						routes: [{ name: 'Login' }],
+					});
+				}
+			}
+		} catch (error) {
+			console.error('Logout error:', error);
+			Alert.alert('Ошибка', 'Не удалось выйти из аккаунта: ' + (error.message || 'Неизвестная ошибка'));
+		}
 	}
 
 	const formatDate = dateString => {
@@ -185,9 +218,6 @@ export default function ProfileScreen({ navigation }) {
 							{client?.name?.charAt(0).toUpperCase() || 'П'}
 						</Text>
 					</View>
-					<View style={styles.sbisConnected}>
-						<Text style={styles.sbisConnectedText}>СБИС ✓</Text>
-					</View>
 				</View>
 				<Text style={styles.headerName}>{client?.name}</Text>
 				<Text style={styles.headerCompany}>{sbisData?.companyName}</Text>
@@ -196,7 +226,7 @@ export default function ProfileScreen({ navigation }) {
 				</View>
 			</View>
 
-			{/* Статистика из СБИС */}
+			{/* Статистика */}
 			<View style={styles.statsSection}>
 				<View style={styles.statsRow}>
 					<View style={styles.statItem}>
@@ -331,10 +361,10 @@ export default function ProfileScreen({ navigation }) {
 				)}
 			</View>
 
-			{/* Данные организации из СБИС */}
+			{/* Данные организации */}
 			<View style={styles.section}>
 				<View style={styles.sectionHeader}>
-					<Text style={styles.sectionTitle}>Данные из СБИС</Text>
+					<Text style={styles.sectionTitle}>Данные организации</Text>
 					<TouchableOpacity
 						style={[
 							styles.syncSmallButton,
@@ -416,7 +446,14 @@ export default function ProfileScreen({ navigation }) {
 
 			{/* Выход */}
 			<View style={styles.section}>
-				<TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+				<TouchableOpacity 
+					style={styles.logoutButton} 
+					onPress={() => {
+						console.log('TouchableOpacity onPress triggered (Profile)');
+						handleLogout();
+					}}
+					activeOpacity={0.7}
+				>
 					<Text style={styles.logoutButtonText}>🚪 Выйти из аккаунта</Text>
 				</TouchableOpacity>
 			</View>
@@ -467,22 +504,6 @@ const styles = StyleSheet.create({
 		fontSize: 40,
 		color: colors.textLight,
 		fontWeight: 'bold',
-	},
-	sbisConnected: {
-		position: 'absolute',
-		bottom: -4,
-		right: -4,
-		backgroundColor: colors.success,
-		paddingHorizontal: 8,
-		paddingVertical: 4,
-		borderRadius: 12,
-		borderWidth: 2,
-		borderColor: colors.primary,
-	},
-	sbisConnectedText: {
-		color: colors.textLight,
-		fontSize: 10,
-		fontWeight: '600',
 	},
 	headerName: {
 		fontSize: 26,

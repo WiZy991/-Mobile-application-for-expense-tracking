@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { pool } = require('../database/init');
+const { dbQuery, isMySQL } = require('../database/init');
 const { notifyPaymentRequired } = require('../services/notificationService');
 
 /**
@@ -8,7 +8,7 @@ const { notifyPaymentRequired } = require('../services/notificationService');
 async function checkPendingPayments() {
   try {
     // Находим все неоплаченные транзакции старше 1 дня
-    const result = await pool.query(
+    const result = await dbQuery(
       `SELECT 
         t.id,
         t.client_id,
@@ -20,13 +20,13 @@ async function checkPendingPayments() {
       LEFT JOIN services s ON t.service_id = s.id
       WHERE t.type = 'charge'
         AND t.status = 'pending'
-        AND t.created_at < NOW() - INTERVAL '1 day'
+        AND t.created_at < ${isMySQL ? "DATE_SUB(NOW(), INTERVAL 1 DAY)" : "NOW() - INTERVAL '1 day'"}
         AND NOT EXISTS (
           SELECT 1 FROM notifications n
           WHERE n.client_id = t.client_id
             AND n.type = 'payment_required'
             AND n.created_at > t.created_at
-            AND n.created_at > NOW() - INTERVAL '1 day'
+            AND n.created_at > ${isMySQL ? "DATE_SUB(NOW(), INTERVAL 1 DAY)" : "NOW() - INTERVAL '1 day'"}
         )`
     );
 
@@ -47,7 +47,7 @@ async function checkLowBalance() {
   try {
     const LOW_BALANCE_THRESHOLD = 1000; // Порог низкого баланса
 
-    const result = await pool.query(
+    const result = await dbQuery(
       `SELECT id, balance
        FROM clients
        WHERE balance < $1
@@ -55,7 +55,7 @@ async function checkLowBalance() {
            SELECT 1 FROM notifications n
            WHERE n.client_id = clients.id
              AND n.type = 'low_balance'
-             AND n.created_at > NOW() - INTERVAL '7 days'
+             AND n.created_at > ${isMySQL ? "DATE_SUB(NOW(), INTERVAL 7 DAY)" : "NOW() - INTERVAL '7 days'"}
          )`,
       [LOW_BALANCE_THRESHOLD]
     );

@@ -135,10 +135,13 @@ export default function SbisDiagnosticsScreen({ navigation }) {
 					onPress: () => {
 						Alert.alert(
 							'API СБИС',
-							'Доступные сервисы API:\n\n' +
-								'• API ЭДО - документы и контрагенты\n' +
-								'• API "Все о компаниях" - поиск по ИНН\n' +
-								'• API Бухгалтерия - счета и платежи\n\n' +
+						'Основные сервисы API:\n\n' +
+							'• API ЭДО - электронный документооборот\n' +
+							'• API "Все о компаниях" - поиск организаций по ИНН\n' +
+							'• API Бухгалтерия - бухгалтерские документы (через ЭДО)\n' +
+							'• API Отчетность - отправка отчетов в госорганы\n' +
+							'• API ОФД - онлайн-кассы и фискальные документы\n' +
+							'• API CRM - управление сделками\n\n' +
 								'Подробнее: saby.ru/help/integration/api'
 						)
 					},
@@ -383,13 +386,18 @@ export default function SbisDiagnosticsScreen({ navigation }) {
 				<Text style={styles.infoTitle}>ℹ️ О тарифах СБИС API</Text>
 				<Text style={styles.infoText}>
 					Каждый сервис API СБИС требует подключения отдельного тарифа.{'\n\n'}
-					<Text style={styles.infoHighlight}>API ЭДО</Text> — работа с
-					документами и контрагентами{'\n'}
+					<Text style={styles.infoHighlight}>API ЭДО</Text> — электронный
+					документооборот с контрагентами{'\n'}
 					<Text style={styles.infoHighlight}>API "Все о компаниях"</Text> —
-					поиск организаций по ИНН{'\n'}
-					<Text style={styles.infoHighlight}>API Бухгалтерия</Text> — счета и
-					взаиморасчёты{'\n\n'}
-					Подробнее: saby.ru/help/integration/api
+					поиск организаций по ИНН, оценка надежности{'\n'}
+					<Text style={styles.infoHighlight}>API Бухгалтерия</Text> — работа с
+					бухгалтерскими документами (работает через ЭДО){'\n'}
+					<Text style={styles.infoHighlight}>API Отчетность</Text> — отправка
+					отчетов в ФНС, ФСС и другие госорганы{'\n'}
+					<Text style={styles.infoHighlight}>API ОФД</Text> — данные с
+					онлайн-касс и фискальных документов{'\n\n'}
+					Полный список сервисов и документация:{'\n'}
+					saby.ru/help/integration/api
 				</Text>
 			</View>
 

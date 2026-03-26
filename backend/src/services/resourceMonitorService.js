@@ -1,4 +1,4 @@
-const { pool } = require('../database/init');
+const { pool, dbQuery, isMySQL } = require('../database/init');
 const { sendNotification } = require('./notificationService');
 const axios = require('axios');
 
@@ -30,7 +30,7 @@ async function checkExpiringResources() {
     infoDate.setDate(infoDate.getDate() + NOTIFICATION_THRESHOLDS.info);
 
     // Находим ресурсы, которые скоро истекают
-    const result = await pool.query(`
+    const result = await dbQuery(`
       SELECT 
         cr.*,
         c.id as client_id,
@@ -43,7 +43,7 @@ async function checkExpiringResources() {
       WHERE cr.status IN ('active', 'expiring_soon')
         AND cr.expiry_date BETWEEN $1 AND $2
         AND (cr.last_notified_at IS NULL 
-             OR cr.last_notified_at < NOW() - INTERVAL '7 days')
+             OR cr.last_notified_at < ${isMySQL ? "DATE_SUB(NOW(), INTERVAL 7 DAY)" : "NOW() - INTERVAL '7 days'"})
         AND cr.renewal_notification_sent = false
       ORDER BY cr.expiry_date ASC
     `, [today.toISOString().split('T')[0], urgentDate.toISOString().split('T')[0]]);
@@ -101,7 +101,7 @@ async function checkExpiringResources() {
       );
 
       // Создаем уведомление в БД с related_id
-      await pool.query(
+      await dbQuery(
         `INSERT INTO notifications (client_id, type, title, message, related_id, related_type)
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [
@@ -115,7 +115,7 @@ async function checkExpiringResources() {
       );
 
       // Обновляем статус ресурса
-      await pool.query(`
+      await dbQuery(`
         UPDATE client_resources
         SET 
           status = CASE 
@@ -155,7 +155,7 @@ async function autoRenewResources() {
     renewalDate.setDate(renewalDate.getDate() + 3); // Продлеваем за 3 дня до окончания
 
     // Находим ресурсы с включенным автопродлением и достаточным балансом
-    const result = await pool.query(`
+    const result = await dbQuery(`
       SELECT 
         cr.*,
         c.id as client_id,
@@ -195,7 +195,7 @@ async function autoRenewResources() {
           }
         );
 
-        await pool.query(
+        await dbQuery(
           `INSERT INTO notifications (client_id, type, title, message, related_id, related_type)
            VALUES ($1, $2, $3, $4, $5, $6)`,
           [
@@ -221,15 +221,20 @@ async function autoRenewResources() {
  * Продление ресурса
  */
 async function renewResource(resource) {
-  const client = await pool.connect();
+  const client = isMySQL ? await pool.getConnection() : await pool.connect();
   
   try {
-    await client.query('BEGIN');
+    if (isMySQL) {
+      await client.beginTransaction();
+    } else {
+      await client.query('BEGIN');
+    }
 
     // Проверяем баланс еще раз
-    const clientResult = await client.query(
+    const clientResult = await dbQuery(
       'SELECT balance FROM clients WHERE id = $1 FOR UPDATE',
-      [resource.client_id]
+      [resource.client_id],
+      client
     );
 
     if (clientResult.rows.length === 0) {
@@ -247,13 +252,14 @@ async function renewResource(resource) {
     newExpiryDate.setFullYear(newExpiryDate.getFullYear() + 1);
 
     // Списываем с баланса
-    await client.query(
+    await dbQuery(
       'UPDATE clients SET balance = balance - $1, updated_at = NOW() WHERE id = $2',
-      [resource.renewal_price, resource.client_id]
+      [resource.renewal_price, resource.client_id],
+      client
     );
 
     // Создаем транзакцию
-    await client.query(`
+    await dbQuery(`
       INSERT INTO transactions 
       (client_id, type, amount, description, status, sbis_invoice_id)
       VALUES ($1, 'charge', $2, $3, 'completed', $4)
@@ -262,10 +268,10 @@ async function renewResource(resource) {
       resource.renewal_price,
       `Автоматическое продление: ${resource.resource_name}`,
       null // sbis_invoice_id будет добавлен при создании счета
-    ]);
+    ], client);
 
     // Обновляем ресурс
-    await client.query(`
+    await dbQuery(`
       UPDATE client_resources
       SET 
         expiry_date = $1,
@@ -279,7 +285,7 @@ async function renewResource(resource) {
       newExpiryDate.toISOString().split('T')[0],
       new Date().toISOString().split('T')[0],
       resource.id
-    ]);
+    ], client);
 
     // Создаем счет в СБИС (если есть ИНН)
     if (resource.inn) {
@@ -320,9 +326,10 @@ async function renewResource(resource) {
 
         if (invoiceResponse.data && invoiceResponse.data.id) {
           // Обновляем транзакцию с ID счета
-          await client.query(
+          await dbQuery(
             'UPDATE transactions SET sbis_invoice_id = $1 WHERE client_id = $2 AND description LIKE $3 ORDER BY created_at DESC LIMIT 1',
-            [invoiceResponse.data.id, resource.client_id, `%${resource.resource_name}%`]
+            [invoiceResponse.data.id, resource.client_id, `%${resource.resource_name}%`],
+            client
           );
         }
       } catch (sbisError) {
@@ -357,12 +364,26 @@ async function renewResource(resource) {
       ]
     );
 
-    await client.query('COMMIT');
+    if (isMySQL) {
+      await client.commit();
+    } else {
+      await client.query('COMMIT');
+    }
   } catch (error) {
-    await client.query('ROLLBACK');
+    try {
+      if (isMySQL) {
+        await client.rollback();
+      } else {
+        await client.query('ROLLBACK');
+      }
+    } catch (_) {}
     throw error;
   } finally {
-    client.release();
+    if (isMySQL) {
+      client.release();
+    } else {
+      client.release();
+    }
   }
 }
 
