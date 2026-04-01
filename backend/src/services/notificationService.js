@@ -1,4 +1,5 @@
-const { pool } = require('../database/init');
+const axios = require('axios');
+const { dbQuery } = require('../database/init');
 const nodemailer = require('nodemailer');
 const TelegramBot = require('node-telegram-bot-api');
 
@@ -23,7 +24,7 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
  * Создать уведомление в БД
  */
 async function createNotification(clientId, type, title, message) {
-  const result = await pool.query(
+  const result = await dbQuery(
     `INSERT INTO notifications (client_id, type, title, message)
      VALUES ($1, $2, $3, $4)
      RETURNING *`,
@@ -31,6 +32,68 @@ async function createNotification(clientId, type, title, message) {
   );
 
   return result.rows[0];
+}
+
+async function sendPushNotification(clientId, title, message, data = {}) {
+  if (!process.env.FIREBASE_SERVER_KEY) {
+    return;
+  }
+
+  try {
+    const tokensResult = await dbQuery(
+      `SELECT fcm_token
+       FROM client_push_tokens
+       WHERE client_id = $1 AND is_active = true`,
+      [clientId]
+    );
+
+    if (!tokensResult.rows.length) {
+      return;
+    }
+
+    for (const row of tokensResult.rows) {
+      const token = row.fcm_token;
+      try {
+        const response = await axios.post(
+          'https://fcm.googleapis.com/fcm/send',
+          {
+            to: token,
+            priority: 'high',
+            notification: {
+              title,
+              body: message,
+              sound: 'default'
+            },
+            data: {
+              ...data,
+              type: String(data.type || ''),
+              relatedId: String(data.relatedId || ''),
+              relatedType: String(data.relatedType || '')
+            }
+          },
+          {
+            headers: {
+              Authorization: `key=${process.env.FIREBASE_SERVER_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000
+          }
+        );
+
+        const resultItem = response.data?.results?.[0];
+        if (resultItem?.error === 'NotRegistered' || resultItem?.error === 'InvalidRegistration') {
+          await dbQuery(
+            'UPDATE client_push_tokens SET is_active = false, updated_at = NOW() WHERE client_id = $1 AND fcm_token = $2',
+            [clientId, token]
+          );
+        }
+      } catch (pushError) {
+        console.error('Push send error:', pushError.response?.data || pushError.message);
+      }
+    }
+  } catch (error) {
+    console.error('Push notification error:', error.message);
+  }
 }
 
 /**
@@ -42,7 +105,7 @@ async function sendNotification(clientId, type, title, message, options = {}) {
     const notification = await createNotification(clientId, type, title, message);
 
     // Получаем данные клиента
-    const clientResult = await pool.query(
+    const clientResult = await dbQuery(
       'SELECT email, phone FROM clients WHERE id = $1',
       [clientId]
     );
@@ -79,8 +142,13 @@ async function sendNotification(clientId, type, title, message, options = {}) {
       }
     }
 
-    // Push-уведомления будут отправляться через мобильное приложение
-    // Здесь можно добавить интеграцию с FCM (Firebase Cloud Messaging)
+    if (options.sendPush !== false) {
+      await sendPushNotification(clientId, title, message, {
+        type,
+        relatedId: options.relatedId || '',
+        relatedType: options.relatedType || ''
+      });
+    }
 
     return notification;
   } catch (error) {
@@ -131,6 +199,7 @@ async function notifyLowBalance(clientId, balance) {
 module.exports = {
   sendNotification,
   createNotification,
+  sendPushNotification,
   notifyPaymentRequired,
   notifyCharge,
   notifyLowBalance

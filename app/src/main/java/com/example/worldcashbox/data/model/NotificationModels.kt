@@ -10,3 +10,9 @@ data class Notification(
     val relatedType: String? = null, // 'ticket', 'service', etc.
     val createdAt: String
 )
+
+data class PushTokenRequest(
+    val token: String,
+    val deviceId: String? = null,
+    val platform: String = "android"
+)

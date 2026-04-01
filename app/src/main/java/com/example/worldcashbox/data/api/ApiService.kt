@@ -88,6 +88,12 @@ interface ApiService {
     
     @PUT("notifications/read-all")
     suspend fun markAllNotificationsAsRead(): Response<Unit>
+
+    @POST("notifications/push-token")
+    suspend fun registerPushToken(@Body request: PushTokenRequest): Response<Map<String, Any>>
+
+    @HTTP(method = "DELETE", path = "notifications/push-token", hasBody = true)
+    suspend fun unregisterPushToken(@Body request: PushTokenRequest): Response<Map<String, Any>>
     
     // Subscriptions
     @GET("subscriptions/plans")

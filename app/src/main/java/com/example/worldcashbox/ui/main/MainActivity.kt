@@ -36,7 +36,6 @@ class MainActivity : AppCompatActivity() {
 
         tokenManager = TokenManager(this)
         RetrofitClient.initialize(this)
-
         if (!tokenManager.isLoggedIn()) {
             navigateToLogin()
             return

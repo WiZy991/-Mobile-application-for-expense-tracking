@@ -4,6 +4,43 @@ const { dbQuery, isMySQL } = require('../database/init');
 const { sendNotification } = require('../services/notificationService');
 
 const router = express.Router();
+let pushTokensTableReady = false;
+
+async function ensurePushTokensTable() {
+  if (pushTokensTableReady) return;
+
+  if (isMySQL) {
+    await dbQuery(`
+      CREATE TABLE IF NOT EXISTS client_push_tokens (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        client_id INT NOT NULL,
+        fcm_token VARCHAR(512) NOT NULL,
+        device_id VARCHAR(191) NULL,
+        platform VARCHAR(20) DEFAULT 'android',
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_client_token (client_id, fcm_token)
+      )
+    `);
+  } else {
+    await dbQuery(`
+      CREATE TABLE IF NOT EXISTS client_push_tokens (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL,
+        fcm_token VARCHAR(512) NOT NULL,
+        device_id VARCHAR(191),
+        platform VARCHAR(20) DEFAULT 'android',
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (client_id, fcm_token)
+      )
+    `);
+  }
+
+  pushTokensTableReady = true;
+}
 
 // Конвертируем MySQL TINYINT(1) в boolean для is_read
 function normalizeNotification(row) {
@@ -14,6 +51,70 @@ function normalizeNotification(row) {
 }
 
 router.use(authenticateToken);
+
+// Зарегистрировать push-токен устройства
+router.post('/push-token', async (req, res) => {
+  try {
+    await ensurePushTokensTable();
+
+    const { token, deviceId = null, platform = 'android' } = req.body || {};
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Push token is required' });
+    }
+
+    if (isMySQL) {
+      await dbQuery(
+        `INSERT INTO client_push_tokens (client_id, fcm_token, device_id, platform, is_active)
+         VALUES ($1, $2, $3, $4, true)
+         ON DUPLICATE KEY UPDATE
+           is_active = true,
+           device_id = VALUES(device_id),
+           platform = VALUES(platform),
+           updated_at = CURRENT_TIMESTAMP`,
+        [req.user.id, token, deviceId, platform]
+      );
+    } else {
+      await dbQuery(
+        `INSERT INTO client_push_tokens (client_id, fcm_token, device_id, platform, is_active)
+         VALUES ($1, $2, $3, $4, true)
+         ON CONFLICT (client_id, fcm_token)
+         DO UPDATE SET
+           is_active = true,
+           device_id = EXCLUDED.device_id,
+           platform = EXCLUDED.platform,
+           updated_at = CURRENT_TIMESTAMP`,
+        [req.user.id, token, deviceId, platform]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Register push token error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Отвязать push-токен устройства
+router.delete('/push-token', async (req, res) => {
+  try {
+    await ensurePushTokensTable();
+
+    const { token } = req.body || {};
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Push token is required' });
+    }
+
+    await dbQuery(
+      'UPDATE client_push_tokens SET is_active = false, updated_at = NOW() WHERE client_id = $1 AND fcm_token = $2',
+      [req.user.id, token]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Unregister push token error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Получить количество непрочитанных уведомлений
 router.get('/unread/count', async (req, res) => {
