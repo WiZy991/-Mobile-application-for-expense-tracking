@@ -43,10 +43,10 @@ async function authenticateAny(req, res, next) {
 // Client: creates a support chat (auto-assigns to available support staff)
 router.post('/', authenticateAny, async (req, res) => {
   try {
-    const { clientId, title } = req.body;
+    const clientId = req.body.clientId || req.body.client_id;
+    const title = req.body.title;
 
     if (req.authUser.type === 'staff') {
-      // Staff creates chat with a client
       if (!clientId) return res.status(400).json({ error: 'clientId обязателен' });
 
       const existingResult = await dbQuery(`
