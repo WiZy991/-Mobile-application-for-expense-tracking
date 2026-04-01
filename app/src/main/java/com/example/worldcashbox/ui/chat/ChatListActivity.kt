@@ -37,12 +37,13 @@ class ChatListActivity : AppCompatActivity() {
 
         val tokenManager = TokenManager(this)
         val isManager = tokenManager.getUserRole() == "manager"
+        val isClient = tokenManager.getUserType() == "client"
         supportActionBar?.title = if (isManager) "Чаты (наблюдатель)" else "Чаты"
 
-        if (isManager) {
-            binding.fabNewChat.visibility = View.GONE
-        } else {
+        if (isClient) {
             binding.fabNewChat.setOnClickListener { createNewChat() }
+        } else {
+            binding.fabNewChat.visibility = View.GONE
         }
 
         binding.chatsRecyclerView.layoutManager = LinearLayoutManager(this)
