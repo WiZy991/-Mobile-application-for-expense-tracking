@@ -21,7 +21,12 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
+const http = require('http');
+const { initSocket } = require('./socket');
+
 const app = express();
+const server = http.createServer(app);
+initSocket(server);
 
 // Middleware
 app.use(cors());
@@ -55,6 +60,7 @@ app.use('/api/resources', require('./routes/resources')); // Ресурсы кл
 app.use('/api/subscriptions', require('./routes/subscriptions')); // Подписки и тарифы
 app.use('/api/stores', require('./routes/stores')); // Магазины
 app.use('/api/employees', require('./routes/employees')); // Сотрудники
+app.use('/api/conversations', require('./routes/conversations')); // Прямые чаты
 
 // Health check
 app.get('/health', async (req, res) => {
@@ -99,7 +105,7 @@ initDatabase()
           require('./jobs/subscriptionMonitor'); // Мониторинг подписок
           require('./jobs/sbisMessagesSync'); // Синхронизация сообщений из SBIS
     
-    app.listen(PORT, '0.0.0.0', () => {
+    server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🌐 Server accessible at: http://192.168.0.62:${PORT}`);

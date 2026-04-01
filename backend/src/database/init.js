@@ -1373,6 +1373,51 @@ async function createTables() {
       console.log('Note: Could not create staff_notifications table (may already exist):', error.message);
     }
 
+    // Таблица чатов (direct messaging)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS conversations (
+        id ${getPrimaryKeyType()}${isMySQL ? ` PRIMARY KEY` : ``},
+        type VARCHAR(20) DEFAULT 'direct' CHECK (type IN ('direct', 'group')),
+        title VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS conversation_participants (
+        id ${getPrimaryKeyType()}${isMySQL ? ` PRIMARY KEY` : ``},
+        conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL,
+        user_type VARCHAR(20) NOT NULL CHECK (user_type IN ('client', 'staff')),
+        role VARCHAR(20) DEFAULT 'member' CHECK (role IN ('member', 'observer')),
+        last_read_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS direct_messages (
+        id ${getPrimaryKeyType()}${isMySQL ? ` PRIMARY KEY` : ``},
+        conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
+        sender_id INTEGER NOT NULL,
+        sender_type VARCHAR(20) NOT NULL CHECK (sender_type IN ('client', 'staff')),
+        message TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    const chatIndexes = [
+      { name: 'idx_conv_participants_conv_id', table: 'conversation_participants', columns: 'conversation_id' },
+      { name: 'idx_conv_participants_user', table: 'conversation_participants', columns: 'user_id, user_type' },
+      { name: 'idx_direct_messages_conv_id', table: 'direct_messages', columns: 'conversation_id' },
+      { name: 'idx_direct_messages_created_at', table: 'direct_messages', columns: 'created_at' }
+    ];
+    for (const idx of chatIndexes) {
+      await createIndexIfNotExists(client, idx.name, idx.table, idx.columns);
+    }
+
     if (isMySQL) {
       await client.query('COMMIT');
     } else {

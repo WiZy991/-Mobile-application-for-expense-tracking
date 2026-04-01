@@ -66,6 +66,66 @@ const staffIdCache = new Map() // key: "Фамилия Имя Отчество",
 // Кэш соответствия числового ID -> UUID сотрудника
 const staffUuidCache = new Map() // key: числовой ID, value: UUID
 
+// Кэш для ID директора-наблюдателя
+let directorSBISInfo = null // { Идентификатор, Фамилия, Имя, Отчество }
+let directorSBISInfoResolved = false
+
+/**
+ * Найти ID директора в СБИС по ФИО из SBIS_DIRECTOR_FULL_NAME
+ */
+async function findDirectorSBISInfo(oauthToken) {
+	if (directorSBISInfoResolved) return directorSBISInfo
+
+	const directorFullName = (process.env.SBIS_DIRECTOR_FULL_NAME || '').trim()
+	if (!directorFullName) {
+		directorSBISInfoResolved = true
+		return null
+	}
+
+	const parts = directorFullName.split(/\s+/).filter(s => s.length > 0)
+	if (parts.length < 2) {
+		console.warn('[SBIS Observer] Некорректное ФИО директора:', directorFullName)
+		directorSBISInfoResolved = true
+		return null
+	}
+
+	const targetFamilia = parts[0]
+	const targetImya = parts[1]
+	const targetOtchestvo = parts[2] || ''
+
+	try {
+		const employees = await getStaffListFromSBIS(oauthToken)
+		const match = employees.find(emp => {
+			return emp.Фамилия === targetFamilia
+				&& emp.Имя === targetImya
+				&& (!targetOtchestvo || emp.Отчество === targetOtchestvo)
+		})
+
+		if (match && match.Идентификатор) {
+			directorSBISInfo = {
+				Идентификатор: String(match.Идентификатор),
+				Фамилия: match.Фамилия,
+				Имя: match.Имя,
+				Отчество: match.Отчество || ''
+			}
+			console.log(`[SBIS Observer] Директор найден: ${directorFullName}, ID: ${match.Идентификатор}`)
+		} else {
+			directorSBISInfo = {
+				Фамилия: targetFamilia,
+				Имя: targetImya,
+				Отчество: targetOtchestvo
+			}
+			console.warn(`[SBIS Observer] Директор "${directorFullName}" не найден в списке сотрудников, используем только ФИО`)
+		}
+	} catch (err) {
+		console.error('[SBIS Observer] Ошибка поиска директора:', err.message)
+		directorSBISInfo = { Фамилия: targetFamilia, Имя: targetImya, Отчество: targetOtchestvo }
+	}
+
+	directorSBISInfoResolved = true
+	return directorSBISInfo
+}
+
 /**
  * Получить список сотрудников из SBIS по подразделению
  * @param {string} oauthToken - OAuth токен для доступа к SBIS API
@@ -620,6 +680,13 @@ async function createSBISTask(taskData, userId = 'default') {
 			console.log('[SBIS Task] Подразделение не указано')
 		}
 		
+		// Добавляем директора как наблюдателя при создании задачи
+		const directorInfo = await findDirectorSBISInfo(oauthToken)
+		if (directorInfo) {
+			documentParams.Наблюдатель = [directorInfo]
+			console.log(`[SBIS Task] Наблюдатель добавлен в документ: ${directorInfo.Фамилия} ${directorInfo.Имя} ${directorInfo.Отчество} (ID: ${directorInfo.Идентификатор || 'нет'})`)
+		}
+
 		// Формируем массив вложений: сначала XML файл задачи, затем файлы от клиента
 		const attachments = [
 			{
@@ -913,13 +980,44 @@ async function createSBISTask(taskData, userId = 'default') {
 				}
 			}
 			
+			// Если наблюдатель не был добавлен при создании, пробуем обновить документ
+		if (!directorInfo) {
+			const directorRetry = await findDirectorSBISInfo(oauthToken)
+			if (directorRetry) {
+				try {
+					const addObserverRequest = {
+						jsonrpc: '2.0',
+						method: 'СБИС.ЗаписатьДокумент',
+						params: {
+							Документ: {
+								Идентификатор: taskId,
+								Наблюдатель: [directorRetry]
+							}
+						},
+						id: Date.now()
+					};
+					const obsResponse = await axios.post(SBIS_SERVICES.edo, addObserverRequest, {
+						headers: { 'Content-Type': 'application/json-rpc; charset=utf-8', 'X-SBISAccessToken': oauthToken },
+						timeout: 15000,
+					});
+					if (obsResponse.data.result && !obsResponse.data.error) {
+						console.log(`✅ [SBIS] Директор добавлен как наблюдатель задачи ${taskId} (повторная попытка)`);
+					} else {
+						console.warn(`⚠️ [SBIS] Не удалось добавить наблюдателя: ${obsResponse.data.error?.message || 'unknown'}`);
+					}
+				} catch (obsError) {
+					console.warn(`⚠️ [SBIS] Ошибка добавления наблюдателя: ${obsError.message}`);
+				}
+			}
+		}
+
 			return {
 				success: true,
 				sbisTaskId: taskId,
 				sbisTaskNumber: response.data.result.Номер || taskData.subject,
 				sbisLink: taskLink,
 				details: response.data.result,
-				assignedStaff: nextStaff || null // Информация о назначенном инженере из SBIS
+				assignedStaff: nextStaff || null
 			}
 		}
 

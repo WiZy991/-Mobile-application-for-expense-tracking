@@ -77,6 +77,9 @@ dependencies {
     // Image loading
     implementation("com.github.bumptech.glide:glide:4.16.0")
     
+    // WebSocket (Socket.IO)
+    implementation("io.socket:socket.io-client:2.1.1")
+    
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

@@ -9,6 +9,7 @@ data class Ticket(
     val priority: String, // "low", "normal", "high", "urgent"
     @SerializedName("created_at") val createdAt: String,
     @SerializedName("updated_at") val updatedAt: String?,
+    @SerializedName("client_id") val clientId: Int? = null,
     @SerializedName("client_name") val clientName: String? = null,
     @SerializedName("client_email") val clientEmail: String? = null,
     @SerializedName("assigned_to") val assignedTo: Int? = null,

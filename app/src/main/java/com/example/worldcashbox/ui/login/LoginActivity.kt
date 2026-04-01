@@ -160,8 +160,7 @@ class LoginActivity : AppCompatActivity() {
         val userType = tokenManager.getUserType()
         val userRole = tokenManager.getUserRole()
         
-        // Если это инженер или support, открываем инженерный кабинет
-        val intent = if (userType == "staff" && (userRole == "engineer" || userRole == "support")) {
+        val intent = if (userType == "staff" && (userRole == "engineer" || userRole == "support" || userRole == "manager")) {
             Intent(this, com.example.worldcashbox.ui.engineer.EngineerTicketsActivity::class.java)
         } else {
             Intent(this, MainActivity::class.java)

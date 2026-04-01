@@ -180,6 +180,19 @@
                         android:textColor="@color/primary"
                         android:visibility="gone" />
 
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/chatWithClientButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Написать клиенту в чат"
+                        android:textSize="13sp"
+                        android:layout_marginTop="4dp"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        app:icon="@drawable/ic_send"
+                        app:iconSize="16dp"
+                        app:strokeColor="@color/primary"
+                        android:textColor="@color/primary" />
+
                 </LinearLayout>
 
             </LinearLayout>

@@ -272,4 +272,24 @@ interface ApiService {
         @Query("period") period: String = "month",
         @Query("assigned_to") assignedTo: String = "me"
     ): Response<Map<String, Any>>
+
+    // Direct Conversations
+    @GET("conversations")
+    suspend fun getConversations(): Response<ConversationsListResponse>
+
+    @POST("conversations")
+    suspend fun createConversation(@Body request: CreateConversationRequest): Response<CreateConversationResponse>
+
+    @GET("conversations/{id}/messages")
+    suspend fun getConversationMessages(
+        @Path("id") conversationId: Int,
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0
+    ): Response<ConversationMessagesResponse>
+
+    @POST("conversations/{id}/messages")
+    suspend fun sendConversationMessage(
+        @Path("id") conversationId: Int,
+        @Body request: SendDirectMessageRequest
+    ): Response<Map<String, Any>>
 }

@@ -13,6 +13,7 @@ import com.example.worldcashbox.R
 import com.example.worldcashbox.data.api.RetrofitClient
 import com.example.worldcashbox.data.model.Ticket
 import com.example.worldcashbox.databinding.ActivityEngineerTicketsBinding
+import com.example.worldcashbox.ui.chat.ChatListActivity
 import com.example.worldcashbox.utils.TokenManager
 import com.example.worldcashbox.ui.login.LoginActivity
 import kotlinx.coroutines.launch
@@ -21,8 +22,10 @@ class EngineerTicketsActivity : AppCompatActivity() {
     private lateinit var binding: ActivityEngineerTicketsBinding
     private lateinit var ticketsAdapter: EngineerTicketsAdapter
     private lateinit var tokenManager: TokenManager
-    private var currentFilter: String? = null // "to_do", "in_progress", "in_review", "done", "closed"
-    private var assignedFilter: String = "all" // "all", "me", "unassigned"
+    private var currentFilter: String? = null
+    private var assignedFilter: String = "all"
+    private val isManager: Boolean
+        get() = tokenManager.getUserRole() == "manager"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,12 +34,16 @@ class EngineerTicketsActivity : AppCompatActivity() {
 
         tokenManager = TokenManager(this)
         
-        // Инициализируем RetrofitClient
         RetrofitClient.initialize(this)
 
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = "Тикеты поддержки"
+        supportActionBar?.title = if (isManager) "Все тикеты (наблюдатель)" else "Тикеты поддержки"
+
+        if (isManager) {
+            assignedFilter = "all"
+            binding.assignedChipGroup.visibility = android.view.View.GONE
+        }
 
         setupRecyclerView()
         setupFilterChips()
@@ -147,6 +154,10 @@ class EngineerTicketsActivity : AppCompatActivity() {
             }
             R.id.menu_refresh -> {
                 loadTickets()
+                true
+            }
+            R.id.menu_chats -> {
+                startActivity(Intent(this, ChatListActivity::class.java))
                 true
             }
             R.id.menu_analytics -> {

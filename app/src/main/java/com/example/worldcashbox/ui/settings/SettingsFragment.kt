@@ -398,6 +398,18 @@ class SettingsFragment : Fragment() {
             }
         }
 
+        binding.chatsMenuItem?.setOnClickListener {
+            try {
+                val ctx = getSafeContext() ?: return@setOnClickListener
+                startActivity(Intent(ctx, com.example.worldcashbox.ui.chat.ChatListActivity::class.java))
+            } catch (e: Exception) {
+                android.util.Log.e("Settings", "Ошибка открытия чатов", e)
+                getSafeContext()?.let { ctx ->
+                    Toast.makeText(ctx, "Ошибка открытия чатов", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
         binding.termsMenuItem?.setOnClickListener {
             try {
                 val ctx = getSafeContext() ?: return@setOnClickListener

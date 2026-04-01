@@ -36,6 +36,7 @@ import com.example.worldcashbox.data.model.Message
 import com.example.worldcashbox.data.model.MessageFile
 import com.example.worldcashbox.data.model.MessageReaction
 import com.example.worldcashbox.databinding.ActivityClientTicketDetailBinding
+import com.example.worldcashbox.data.api.SocketManager
 import com.example.worldcashbox.utils.TokenManager
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -79,10 +80,12 @@ class ClientTicketDetailActivity : AppCompatActivity() {
         setupRecyclerView()
         setupListeners()
         loadTicketDetails()
-        
+        setupSocketListeners()
+
+        // Fallback polling (longer interval since WebSocket handles real-time)
         lifecycleScope.launch {
             while (true) {
-                kotlinx.coroutines.delay(5000)
+                kotlinx.coroutines.delay(30000)
                 if (!isFinishing && !isDestroyed) {
                     loadTicketDetails(false)
                 } else {
@@ -90,6 +93,45 @@ class ClientTicketDetailActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun setupSocketListeners() {
+        SocketManager.connect(this)
+        SocketManager.joinTicket(ticketId)
+
+        SocketManager.onNewMessage { data ->
+            val msgTicketId = data.optInt("ticketId", 0)
+            if (msgTicketId == ticketId) {
+                runOnUiThread { loadTicketDetails(false) }
+            }
+        }
+
+        SocketManager.onStatusChanged { data ->
+            val tId = data.optInt("ticketId", 0)
+            if (tId == ticketId) {
+                runOnUiThread { loadTicketDetails(false) }
+            }
+        }
+
+        SocketManager.onTyping { data ->
+            val tId = data.optInt("ticketId", 0)
+            if (tId == ticketId) {
+                runOnUiThread { supportActionBar?.subtitle = "печатает..." }
+            }
+        }
+
+        SocketManager.onStopTyping { data ->
+            val tId = data.optInt("ticketId", 0)
+            if (tId == ticketId) {
+                runOnUiThread { supportActionBar?.subtitle = null }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        SocketManager.leaveTicket(ticketId)
+        SocketManager.offAll()
+        super.onDestroy()
     }
 
     private fun setupRecyclerView() {

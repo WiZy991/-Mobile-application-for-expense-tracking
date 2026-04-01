@@ -9,6 +9,11 @@
         app:showAsAction="ifRoom" />
     
     <item
+        android:id="@+id/menu_chats"
+        android:title="Чаты"
+        app:showAsAction="ifRoom" />
+
+    <item
         android:id="@+id/menu_analytics"
         android:icon="@drawable/ic_analytics"
         android:title="Аналитика"

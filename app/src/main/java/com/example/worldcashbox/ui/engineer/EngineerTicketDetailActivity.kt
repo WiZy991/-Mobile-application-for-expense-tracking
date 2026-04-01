@@ -34,6 +34,7 @@ import com.example.worldcashbox.data.api.ApiConfig
 import com.example.worldcashbox.data.api.RetrofitClient
 import com.example.worldcashbox.data.model.*
 import com.example.worldcashbox.databinding.ActivityEngineerTicketDetailBinding
+import com.example.worldcashbox.data.api.SocketManager
 import com.example.worldcashbox.ui.support.MessagesAdapter
 import com.example.worldcashbox.utils.TokenManager
 import kotlinx.coroutines.launch
@@ -79,10 +80,22 @@ class EngineerTicketDetailActivity : AppCompatActivity() {
         setupRecyclerView()
         setupListeners()
         loadTicketDetails()
-        
+
+        val isManager = TokenManager(this).getUserRole() == "manager"
+        if (isManager) {
+            binding.newMessageEditText.visibility = View.GONE
+            binding.sendMessageButton.visibility = View.GONE
+            binding.attachFileButton.visibility = View.GONE
+            binding.statusButton.visibility = View.GONE
+            supportActionBar?.title = "Тикет (просмотр)"
+        }
+
+        setupSocketListeners()
+
+        // Fallback polling (longer interval since WebSocket handles real-time)
         lifecycleScope.launch {
             while (true) {
-                kotlinx.coroutines.delay(5000)
+                kotlinx.coroutines.delay(30000)
                 if (!isFinishing && !isDestroyed) {
                     loadTicketDetails(false)
                 } else {
@@ -214,6 +227,39 @@ class EngineerTicketDetailActivity : AppCompatActivity() {
         binding.attachFileButton.setOnClickListener { filePickerLauncher.launch("*/*") }
         binding.statusButton.setOnClickListener { showStatusDialog() }
         binding.cardHeaderLayout.setOnClickListener { toggleCardExpand() }
+        binding.chatWithClientButton.setOnClickListener { openOrCreateChatWithClient() }
+
+        val isManager = TokenManager(this).getUserRole() == "manager"
+        if (isManager) {
+            binding.chatWithClientButton.visibility = View.GONE
+        }
+    }
+
+    private fun openOrCreateChatWithClient() {
+        val clientId = ticket?.clientId ?: run {
+            Toast.makeText(this, "Нет данных о клиенте", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                binding.chatWithClientButton.isEnabled = false
+                val request = com.example.worldcashbox.data.model.CreateConversationRequest(clientId = clientId)
+                val response = RetrofitClient.apiService.createConversation(request)
+                if (response.isSuccessful && response.body() != null) {
+                    val result = response.body()!!
+                    val intent = Intent(this@EngineerTicketDetailActivity, com.example.worldcashbox.ui.chat.ChatDetailActivity::class.java)
+                    intent.putExtra("conversationId", result.conversationId)
+                    intent.putExtra("title", ticket?.clientName ?: "Чат")
+                    startActivity(intent)
+                } else {
+                    Toast.makeText(this@EngineerTicketDetailActivity, "Ошибка создания чата", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@EngineerTicketDetailActivity, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
+            } finally {
+                binding.chatWithClientButton.isEnabled = true
+            }
+        }
     }
 
     private fun toggleCardExpand() {
@@ -407,6 +453,9 @@ class EngineerTicketDetailActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.engineer_ticket_detail_menu, menu)
+        if (TokenManager(this).getUserRole() == "manager") {
+            menu.findItem(R.id.menu_delete_ticket)?.isVisible = false
+        }
         return true
     }
 
@@ -441,6 +490,49 @@ class EngineerTicketDetailActivity : AppCompatActivity() {
                 Toast.makeText(this@EngineerTicketDetailActivity, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    private fun setupSocketListeners() {
+        SocketManager.connect(this)
+        SocketManager.joinTicket(ticketId)
+
+        SocketManager.onNewMessage { data ->
+            val msgTicketId = data.optInt("ticketId", 0)
+            if (msgTicketId == ticketId) {
+                runOnUiThread { loadTicketDetails(false) }
+            }
+        }
+
+        SocketManager.onStatusChanged { data ->
+            val tId = data.optInt("ticketId", 0)
+            if (tId == ticketId) {
+                runOnUiThread { loadTicketDetails(false) }
+            }
+        }
+
+        SocketManager.onTyping { data ->
+            val tId = data.optInt("ticketId", 0)
+            if (tId == ticketId) {
+                runOnUiThread {
+                    supportActionBar?.subtitle = "печатает..."
+                }
+            }
+        }
+
+        SocketManager.onStopTyping { data ->
+            val tId = data.optInt("ticketId", 0)
+            if (tId == ticketId) {
+                runOnUiThread {
+                    supportActionBar?.subtitle = null
+                }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        SocketManager.leaveTicket(ticketId)
+        SocketManager.offAll()
+        super.onDestroy()
     }
 
     private fun getStatusText(status: String): String = when (status) {

@@ -5,6 +5,7 @@ const { pool, dbQuery, isMySQL } = require('../database/init');
 const { upload } = require('../middleware/upload');
 const path = require('path');
 const fs = require('fs');
+const { emitTicketMessage, emitTicketStatusChanged } = require('../socket');
 
 const router = express.Router();
 
@@ -63,7 +64,7 @@ router.post('/register', async (req, res) => {
     console.log('=== Staff Registration Request ===');
     console.log('Body:', { email: req.body.email, name: req.body.name, role: req.body.role });
     
-    const { email, password, name, role = 'support', secretKey } = req.body;
+    const { email, password, name, full_name, role = 'support', secretKey } = req.body;
 
     // Проверяем секретный ключ (можно задать в .env)
     const requiredSecretKey = process.env.STAFF_REGISTRATION_KEY || 'CHANGE_THIS_SECRET_KEY';
@@ -229,8 +230,9 @@ router.post('/auth', async (req, res) => {
 // Получить тикеты поддержки для сотрудников
 router.get('/support/tickets', authenticateStaff, async (req, res) => {
   try {
-    if (req.staff.role !== 'support' && req.staff.role !== 'engineer') {
-      return res.status(403).json({ error: 'Доступ только для отдела поддержки или инженеров' });
+    const allowedRoles = ['support', 'engineer', 'manager'];
+    if (!allowedRoles.includes(req.staff.role)) {
+      return res.status(403).json({ error: 'Доступ запрещён для вашей роли' });
     }
 
     const { status, assigned_to } = req.query;
@@ -282,11 +284,12 @@ router.get('/support/tickets', authenticateStaff, async (req, res) => {
   }
 });
 
-// Получить детальную информацию о тикете (для инженеров)
+// Получить детальную информацию о тикете (для инженеров и менеджеров)
 router.get('/support/tickets/:id', authenticateStaff, async (req, res) => {
   try {
-    if (req.staff.role !== 'support' && req.staff.role !== 'engineer') {
-      return res.status(403).json({ error: 'Доступ только для отдела поддержки или инженеров' });
+    const allowedRoles = ['support', 'engineer', 'manager'];
+    if (!allowedRoles.includes(req.staff.role)) {
+      return res.status(403).json({ error: 'Доступ запрещён для вашей роли' });
     }
 
     const ticketId = parseInt(req.params.id);
@@ -650,6 +653,8 @@ router.put('/support/tickets/:id/status', authenticateStaff, async (req, res) =>
       }
     }
 
+    emitTicketStatusChanged(ticketId, status);
+
     res.json({ 
       success: true,
       ticket: verifyResult.rows[0] 
@@ -792,6 +797,28 @@ router.post('/support/tickets/:id/messages', authenticateStaff, upload.array('fi
         connection
       );
       console.log(`[Staff] Created notification for client ${clientId} about ticket #${ticketId}`);
+
+      // Уведомляем менеджеров-наблюдателей о новом ответе инженера
+      const managersResult = await dbQuery(
+        `SELECT id FROM staff WHERE role = 'manager' AND is_active = true AND id != $1`,
+        [req.staff.id],
+        connection
+      );
+      for (const mgr of managersResult.rows) {
+        await dbQuery(
+          `INSERT INTO staff_notifications (staff_id, type, title, message, related_id, related_type)
+           VALUES ($1, 'support', 'Ответ инженера в тикете', $2, $3, 'ticket')`,
+          [
+            mgr.id,
+            `Ответ в тикет #${ticketId}: ${subject}\n\n${messagePreview}`,
+            ticketId
+          ],
+          connection
+        );
+      }
+      if (managersResult.rows.length > 0) {
+        console.log(`[Staff] Notified ${managersResult.rows.length} manager(s) about reply in ticket #${ticketId}`);
+      }
     }
 
     // Коммитим транзакцию
@@ -801,6 +828,8 @@ router.post('/support/tickets/:id/messages', authenticateStaff, upload.array('fi
       await connection.query('COMMIT');
     }
     console.log(`[Staff] Transaction committed for ticket ${ticketId}, message ${messageId}`);
+
+    emitTicketMessage(ticketId, { id: messageId, ticketId, userType: 'support', userId: req.staff.id, message, createdAt: new Date().toISOString() });
 
     res.json({ success: true });
   } catch (error) {
@@ -823,11 +852,14 @@ router.post('/support/tickets/:id/messages', authenticateStaff, upload.array('fi
 // Аналитика задач для инженера (JIRA-стиль)
 router.get('/support/analytics', authenticateStaff, async (req, res) => {
   try {
-    if (req.staff.role !== 'support' && req.staff.role !== 'engineer') {
-      return res.status(403).json({ error: 'Доступ только для отдела поддержки или инженеров' });
+    const allowedRoles = ['support', 'engineer', 'manager'];
+    if (!allowedRoles.includes(req.staff.role)) {
+      return res.status(403).json({ error: 'Доступ запрещён для вашей роли' });
     }
 
-    const { period = 'month', assigned_to = 'me' } = req.query;
+    const { period = 'month' } = req.query;
+    // Менеджер всегда видит все тикеты (assigned_to = 'all')
+    const assigned_to = req.staff.role === 'manager' ? 'all' : (req.query.assigned_to || 'me');
     const staffId = assigned_to === 'me' ? req.staff.id : null;
 
     console.log(`[Analytics] Request: period=${period}, assigned_to=${assigned_to}, staffId=${staffId}`);
@@ -1348,7 +1380,7 @@ router.delete('/support/tickets/:id', authenticateStaff, async (req, res) => {
   }
 });
 
-// Скачать/просмотреть файл тикета (для staff)
+// Скачать/просмотреть файл тикета (для staff, включая менеджеров)
 router.get('/support/tickets/:id/files/:fileId', authenticateStaff, async (req, res) => {
   try {
     const ticketId = parseInt(req.params.id);

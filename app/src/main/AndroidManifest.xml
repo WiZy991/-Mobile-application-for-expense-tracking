@@ -86,6 +86,13 @@
         <activity
             android:name=".ui.sbis.SbisDiagnosticsActivity"
             android:exported="false" />
+        <activity
+            android:name=".ui.chat.ChatListActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.chat.ChatDetailActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
 
     </application>
 

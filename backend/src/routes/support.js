@@ -5,6 +5,7 @@ const { upload } = require('../middleware/upload');
 const path = require('path');
 const fs = require('fs');
 const { createSBISTask } = require('./sbisProxy');
+const { emitTicketMessage } = require('../socket');
 
 const router = express.Router();
 
@@ -655,20 +656,16 @@ router.post('/tickets/:id/messages', authenticateToken, (req, res, next) => {
         : message;
       
       // Создаем уведомления для инженеров
+      const notificationText = `Клиент ${clientName} отправил сообщение в тикет #${ticketId}: "${subject}"\n\n${messagePreview}`;
+
       if (assignedTo) {
-        // Если тикет назначен на конкретного инженера - уведомляем только его
         await dbQuery(
           `INSERT INTO staff_notifications (staff_id, type, title, message, related_id, related_type)
            VALUES ($1, 'support', 'Новое сообщение в тикете', $2, $3, 'ticket')`,
-          [
-            assignedTo,
-            `Клиент ${clientName} отправил сообщение в тикет #${ticketId}: "${subject}"\n\n${messagePreview}`,
-            ticketId
-          ]
+          [assignedTo, notificationText, ticketId]
         );
         console.log(`[Support] Created notification for assigned engineer ${assignedTo} about ticket #${ticketId}`);
       } else {
-        // Если тикет не назначен - уведомляем всех активных инженеров поддержки
         const staffResult = await dbQuery(
           `SELECT id FROM staff WHERE role IN ('support', 'engineer') AND is_active = true`,
           []
@@ -678,16 +675,32 @@ router.post('/tickets/:id/messages', authenticateToken, (req, res, next) => {
           await dbQuery(
             `INSERT INTO staff_notifications (staff_id, type, title, message, related_id, related_type)
              VALUES ($1, 'support', 'Новое сообщение в тикете', $2, $3, 'ticket')`,
-            [
-              staff.id,
-              `Клиент ${clientName} отправил сообщение в тикет #${ticketId}: "${subject}"\n\n${messagePreview}`,
-              ticketId
-            ]
+            [staff.id, notificationText, ticketId]
           );
         }
         console.log(`[Support] Created notifications for ${staffResult.rows.length} support engineers about ticket #${ticketId}`);
       }
+
+      // Уведомляем всех менеджеров (наблюдатели видят все тикеты)
+      const managersResult = await dbQuery(
+        `SELECT id FROM staff WHERE role = 'manager' AND is_active = true`,
+        []
+      );
+      for (const mgr of managersResult.rows) {
+        if (mgr.id !== assignedTo) {
+          await dbQuery(
+            `INSERT INTO staff_notifications (staff_id, type, title, message, related_id, related_type)
+             VALUES ($1, 'support', 'Новое сообщение в тикете', $2, $3, 'ticket')`,
+            [mgr.id, notificationText, ticketId]
+          );
+        }
+      }
+      if (managersResult.rows.length > 0) {
+        console.log(`[Support] Notified ${managersResult.rows.length} manager(s) about ticket #${ticketId}`);
+      }
     }
+
+    emitTicketMessage(ticketId, { id: messageId, ticketId, userType: 'client', userId: req.userId, message, createdAt: new Date().toISOString() });
 
     res.json({ success: true });
   } catch (error) {
