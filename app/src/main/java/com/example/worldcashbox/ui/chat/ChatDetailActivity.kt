@@ -55,11 +55,6 @@ class ChatDetailActivity : AppCompatActivity() {
         val userType = tokenManager.getUserType()
         currentUserType = if (userType == "staff") "staff" else "client"
 
-        val isManager = tokenManager.getUserRole() == "manager"
-        if (isManager) {
-            binding.inputContainer.visibility = View.GONE
-        }
-
         binding.messagesRecyclerView.layoutManager = LinearLayoutManager(this).apply {
             stackFromEnd = true
         }

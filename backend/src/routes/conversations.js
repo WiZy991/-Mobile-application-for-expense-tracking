@@ -43,10 +43,6 @@ async function authenticateAny(req, res, next) {
 // Client: creates a support chat (auto-assigns to available support staff)
 router.post('/', authenticateAny, async (req, res) => {
   try {
-    if (req.authUser.role === 'manager') {
-      return res.status(403).json({ error: 'Менеджеры не могут создавать чаты (только наблюдение)' });
-    }
-
     const { clientId, title } = req.body;
 
     if (req.authUser.type === 'staff') {
@@ -230,7 +226,12 @@ router.get('/:id/messages', authenticateAny, async (req, res) => {
       SELECT dm.*,
         CASE
           WHEN dm.sender_type = 'client' THEN (SELECT name FROM clients WHERE id = dm.sender_id)
-          WHEN dm.sender_type = 'staff' THEN (SELECT name FROM staff WHERE id = dm.sender_id)
+          WHEN dm.sender_type = 'staff' THEN
+            CASE
+              WHEN (SELECT role FROM staff WHERE id = dm.sender_id) = 'manager'
+              THEN 'Менеджер'
+              ELSE (SELECT name FROM staff WHERE id = dm.sender_id)
+            END
         END as sender_name
       FROM direct_messages dm
       WHERE dm.conversation_id = $1
@@ -262,16 +263,13 @@ router.post('/:id/messages', authenticateAny, async (req, res) => {
       return res.status(400).json({ error: 'Сообщение обязательно' });
     }
 
-    // Verify participant and not observer
+    // Verify participant
     const check = await dbQuery(
       `SELECT role FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2 AND user_type = $3`,
       [conversationId, req.authUser.id, req.authUser.type]
     );
     if (check.rows.length === 0) {
       return res.status(403).json({ error: 'Вы не участник этого чата' });
-    }
-    if (check.rows[0].role === 'observer') {
-      return res.status(403).json({ error: 'Наблюдатели не могут отправлять сообщения' });
     }
 
     const result = await dbQuery(
@@ -287,9 +285,10 @@ router.post('/:id/messages', authenticateAny, async (req, res) => {
     );
 
     const newMsg = result.rows[0];
+    const senderLabel = req.authUser.role === 'manager' ? 'Менеджер' : (req.authUser.name || 'Сотрудник');
     emitConversationMessage(conversationId, {
       ...newMsg,
-      senderName: req.authUser.name || 'Сотрудник',
+      senderName: senderLabel,
     });
 
     res.json({ success: true, message: newMsg });
