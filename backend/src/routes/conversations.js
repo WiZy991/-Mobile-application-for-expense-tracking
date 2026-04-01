@@ -15,11 +15,11 @@ async function authenticateAny(req, res, next) {
     const userId = decoded.userId;
 
     const staffResult = await dbQuery(
-      'SELECT id, role FROM staff WHERE id = $1 AND is_active = true',
+      'SELECT id, name, role FROM staff WHERE id = $1 AND is_active = true',
       [userId]
     );
     if (staffResult.rows.length > 0) {
-      req.authUser = { id: staffResult.rows[0].id, type: 'staff', role: staffResult.rows[0].role };
+      req.authUser = { id: staffResult.rows[0].id, type: 'staff', role: staffResult.rows[0].role, name: staffResult.rows[0].name };
       return next();
     }
 
@@ -154,7 +154,7 @@ router.post('/', authenticateAny, async (req, res) => {
     }
   } catch (error) {
     console.error('Create conversation error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
 

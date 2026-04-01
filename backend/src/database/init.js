@@ -1481,25 +1481,28 @@ async function dbQuery(sql, params = [], connection = null) {
     
     // Если был RETURNING в INSERT, получаем вставленную запись
     if (returningColumns && mysqlSql.trim().toUpperCase().startsWith('INSERT')) {
+      const insertId = rows.insertId;
       const tableMatch = mysqlSql.match(/INTO\s+`?(\w+)`?/i);
       const tableName = tableMatch ? tableMatch[1] : null;
-      if (tableName) {
+      if (tableName && insertId) {
         const selectColumns = returningColumns.join(', ');
         try {
           const [insertedRows] = await queryExecutor.query(
-            `SELECT ${selectColumns} FROM \`${tableName}\` WHERE id = LAST_INSERT_ID()`
+            `SELECT ${selectColumns} FROM \`${tableName}\` WHERE id = ?`,
+            [insertId]
           );
           const result = { 
             rows: insertedRows.length > 0 ? [insertedRows[0]] : [],
             affectedRows: insertedRows.length > 0 ? 1 : 0
           };
-          console.log(`[dbQuery] INSERT with RETURNING: inserted ${insertedRows.length} row(s) into ${tableName}`, result.rows[0]);
+          console.log(`[dbQuery] INSERT with RETURNING (insertId=${insertId}): inserted ${insertedRows.length} row(s) into ${tableName}`, result.rows[0]);
           return result;
         } catch (selectError) {
           console.error(`[dbQuery] Error selecting inserted row from ${tableName}:`, selectError.message);
-          // Если не удалось получить вставленную запись, возвращаем пустой результат
-          return { rows: [], affectedRows: 0 };
+          return { rows: [{ id: insertId }], affectedRows: 1 };
         }
+      } else if (insertId) {
+        return { rows: [{ id: insertId }], affectedRows: 1 };
       }
     }
     

@@ -252,7 +252,9 @@ class EngineerTicketDetailActivity : AppCompatActivity() {
                     intent.putExtra("title", ticket?.clientName ?: "Чат")
                     startActivity(intent)
                 } else {
-                    Toast.makeText(this@EngineerTicketDetailActivity, "Ошибка создания чата", Toast.LENGTH_SHORT).show()
+                    val errorBody = response.errorBody()?.string() ?: "unknown"
+                    android.util.Log.e("Chat", "Create chat error: ${response.code()} $errorBody")
+                    Toast.makeText(this@EngineerTicketDetailActivity, "Ошибка создания чата: ${response.code()}", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Toast.makeText(this@EngineerTicketDetailActivity, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
