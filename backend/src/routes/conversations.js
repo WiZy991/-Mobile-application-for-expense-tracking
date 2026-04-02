@@ -5,6 +5,17 @@ const { emitConversationMessage } = require('../socket');
 
 const router = express.Router();
 
+function shortenName(name) {
+  if (!name) return name;
+  return name
+    .replace(/ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ/gi, 'ООО')
+    .replace(/ЗАКРЫТОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО/gi, 'ЗАО')
+    .replace(/ОТКРЫТОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО/gi, 'ОАО')
+    .replace(/ПУБЛИЧНОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО/gi, 'ПАО')
+    .replace(/ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ/gi, 'ИП')
+    .trim();
+}
+
 // Universal auth: detects client or staff from JWT
 async function authenticateAny(req, res, next) {
   try {
@@ -61,7 +72,7 @@ router.post('/', authenticateAny, async (req, res) => {
       }
 
       const clientRes = await dbQuery('SELECT name FROM clients WHERE id = $1', [clientId]);
-      const clientName = clientRes.rows[0]?.name || 'Клиент';
+      const clientName = shortenName(clientRes.rows[0]?.name) || 'Клиент';
       const convTitle = title || clientName;
 
       const convResult = await dbQuery(
@@ -195,8 +206,9 @@ router.get('/', authenticateAny, async (req, res) => {
 
       conversations.push({
         ...conv,
+        title: shortenName(conv.title),
         unread_count: parseInt(conv.unread_count) || 0,
-        participants: participantsResult.rows,
+        participants: participantsResult.rows.map(p => ({ ...p, name: shortenName(p.name) })),
       });
     }
 
@@ -246,7 +258,8 @@ router.get('/:id/messages', authenticateAny, async (req, res) => {
         AND NOT (sender_id = $2 AND sender_type = $3)
     `, [conversationId, req.authUser.id, req.authUser.type]);
 
-    res.json({ messages: result.rows });
+    const messages = result.rows.map(m => ({ ...m, sender_name: shortenName(m.sender_name) }));
+    res.json({ messages });
   } catch (error) {
     console.error('Get messages error:', error);
     res.status(500).json({ error: 'Internal server error' });
