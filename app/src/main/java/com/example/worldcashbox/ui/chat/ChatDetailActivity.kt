@@ -184,17 +184,16 @@ class ChatDetailActivity : AppCompatActivity() {
             holder.messageText.text = msg.message
 
             val isFromMe = msg.senderType == currentUserType
-            val parentLayout = holder.card.parent as LinearLayout
             val lp = holder.card.layoutParams as LinearLayout.LayoutParams
 
             if (isFromMe) {
-                parentLayout.gravity = Gravity.END
+                lp.gravity = Gravity.END
                 lp.marginStart = dpToPx(60)
                 lp.marginEnd = dpToPx(4)
                 holder.card.setCardBackgroundColor(getColor(R.color.primary_light))
                 holder.senderName.visibility = View.GONE
             } else {
-                parentLayout.gravity = Gravity.START
+                lp.gravity = Gravity.START
                 lp.marginStart = dpToPx(4)
                 lp.marginEnd = dpToPx(60)
                 holder.card.setCardBackgroundColor(getColor(R.color.background_light))
