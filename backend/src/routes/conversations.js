@@ -57,7 +57,7 @@ router.post('/', authenticateAny, async (req, res) => {
       `, [req.authUser.id, clientId]);
 
       if (existingResult.rows.length > 0) {
-        return res.json({ conversationId: existingResult.rows[0].id, existing: true });
+        return res.json({ conversation_id: existingResult.rows[0].id, existing: true });
       }
 
       const clientRes = await dbQuery('SELECT name FROM clients WHERE id = $1', [clientId]);
@@ -87,7 +87,7 @@ router.post('/', authenticateAny, async (req, res) => {
         );
       }
 
-      res.json({ conversationId, existing: false });
+      res.json({ conversation_id: conversationId, existing: false });
 
     } else {
       // Client creates a support chat
@@ -110,7 +110,7 @@ router.post('/', authenticateAny, async (req, res) => {
         );
         // If last conversation has no messages, reuse it
         if (parseInt(msgCount.rows[0].cnt) === 0) {
-          return res.json({ conversationId: lastConvId, existing: true });
+          return res.json({ conversation_id: lastConvId, existing: true });
         }
       }
 
@@ -150,7 +150,7 @@ router.post('/', authenticateAny, async (req, res) => {
         );
       }
 
-      res.json({ conversationId, existing: false });
+      res.json({ conversation_id: conversationId, existing: false });
     }
   } catch (error) {
     console.error('Create conversation error:', error);
