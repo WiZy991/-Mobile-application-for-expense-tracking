@@ -1450,14 +1450,20 @@ async function dbQuery(sql, params = [], connection = null) {
   
   if (isMySQL) {
     // Конвертируем PostgreSQL параметры $1, $2, $3 в MySQL параметры ?, ?, ?
+    // PostgreSQL позволяет повторно использовать $1, $2 в одном запросе,
+    // MySQL требует отдельный ? для каждого использования с дублированием параметров
     let mysqlSql = sql;
     const paramMatches = [...sql.matchAll(/\$(\d+)/g)];
+    let mysqlParams = params;
     if (paramMatches.length > 0) {
-      // Заменяем параметры в обратном порядке, чтобы избежать конфликтов
+      // Строим новый массив параметров в порядке появления $N в SQL
+      mysqlParams = paramMatches.map(match => params[parseInt(match[1]) - 1]);
+      // Заменяем все $N на ? в обратном порядке
       for (let i = paramMatches.length - 1; i >= 0; i--) {
         const match = paramMatches[i];
         mysqlSql = mysqlSql.substring(0, match.index) + '?' + mysqlSql.substring(match.index + match[0].length);
       }
+      params = mysqlParams;
     }
     
     // Обрабатываем RETURNING - для MySQL нужно использовать другой подход
