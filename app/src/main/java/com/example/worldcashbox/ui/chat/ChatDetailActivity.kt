@@ -63,6 +63,7 @@ class ChatDetailActivity : AppCompatActivity() {
         binding.sendButton.setOnClickListener { sendMessage() }
 
         loadMessages()
+        loadParticipants()
         setupSocket()
     }
 
@@ -74,6 +75,33 @@ class ChatDetailActivity : AppCompatActivity() {
             if (cId == conversationId) {
                 runOnUiThread { loadMessages() }
             }
+        }
+    }
+
+    private fun loadParticipants() {
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.apiService.getConversations()
+                if (response.isSuccessful && response.body() != null) {
+                    val conv = response.body()!!.conversations.find { it.id == conversationId }
+                    if (conv != null) {
+                        val otherType = if (currentUserType == "staff") "client" else "staff"
+                        val otherMembers = conv.participants
+                            .filter { it.userType == otherType && it.role == "member" }
+                            .mapNotNull { it.name }
+
+                        if (currentUserType == "client") {
+                            supportActionBar?.title = "Чат с поддержкой"
+                        } else if (otherMembers.isNotEmpty()) {
+                            supportActionBar?.title = otherMembers.first().take(30)
+                        }
+
+                        if (otherMembers.isNotEmpty()) {
+                            supportActionBar?.subtitle = otherMembers.joinToString(", ") { it.take(25) }
+                        }
+                    }
+                }
+            } catch (_: Exception) { }
         }
     }
 

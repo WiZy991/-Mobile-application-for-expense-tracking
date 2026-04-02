@@ -67,7 +67,7 @@ class ChatListActivity : AppCompatActivity() {
                     val result = response.body()!!
                     val intent = Intent(this@ChatListActivity, ChatDetailActivity::class.java)
                     intent.putExtra("conversationId", result.conversationId)
-                    intent.putExtra("title", "Новый чат")
+                    intent.putExtra("title", "Чат с поддержкой")
                     startActivity(intent)
                 } else {
                     val errorBody = response.errorBody()?.string() ?: ""

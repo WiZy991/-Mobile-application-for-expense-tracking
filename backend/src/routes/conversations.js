@@ -116,7 +116,7 @@ router.post('/', authenticateAny, async (req, res) => {
 
       const clientRes = await dbQuery('SELECT name FROM clients WHERE id = $1', [req.authUser.id]);
       const clientName = clientRes.rows[0]?.name || 'Клиент';
-      const convTitle = title || `Чат: ${clientName}`;
+      const convTitle = title || `Чат с поддержкой`;
 
       const convResult = await dbQuery(
         `INSERT INTO conversations (type, title) VALUES ('direct', $1) RETURNING id`,
