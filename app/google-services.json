@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "000000000001",
+    "project_number": "469895547222",
     "project_id": "mobile-application-fc740",
-    "storage_bucket": "mobile-application-fc740.appspot.com"
+    "storage_bucket": "mobile-application-fc740.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:000000000001:android:aaaaaaaaaaaaaaaaaaaaaaaa",
+        "mobilesdk_app_id": "1:469895547222:android:933621005bb79d54fa6ef7",
         "android_client_info": {
           "package_name": "com.example.worldcashbox"
         }
@@ -15,26 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyPlaceholderReplaceWithFirebaseConsoleKey0000"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:000000000001:android:bbbbbbbbbbbbbbbbbbbbbbbb",
-        "android_client_info": {
-          "package_name": "com.example.worldcashbox.debug"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyPlaceholderReplaceWithFirebaseConsoleKey0000"
+          "current_key": "AIzaSyAhdPttwXDpu_M6QM3ihDBqVekXguUqJM8"
         }
       ],
       "services": {

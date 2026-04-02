@@ -81,8 +81,8 @@ dependencies {
     // WebSocket (Socket.IO)
     implementation("io.socket:socket.io-client:2.1.1")
 
-    // Firebase
-    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    // Firebase (версии через BoM — как в мастере Firebase)
+    implementation(platform("com.google.firebase:firebase-bom:34.11.0"))
     implementation("com.google.firebase:firebase-messaging")
     
     // Testing
