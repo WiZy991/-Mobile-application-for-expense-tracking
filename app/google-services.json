@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "000000000001",
+    "project_id": "worldcashbox-placeholder",
+    "storage_bucket": "worldcashbox-placeholder.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000001:android:aaaaaaaaaaaaaaaaaaaaaaaa",
+        "android_client_info": {
+          "package_name": "com.example.worldcashbox"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyPlaceholderReplaceWithFirebaseConsoleKey0000"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000001:android:bbbbbbbbbbbbbbbbbbbbbbbb",
+        "android_client_info": {
+          "package_name": "com.example.worldcashbox.debug"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyPlaceholderReplaceWithFirebaseConsoleKey0000"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
