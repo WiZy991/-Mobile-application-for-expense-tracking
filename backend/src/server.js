@@ -61,6 +61,7 @@ app.use('/api/subscriptions', require('./routes/subscriptions')); // Подпи�
 app.use('/api/stores', require('./routes/stores')); // Магазины
 app.use('/api/employees', require('./routes/employees')); // Сотрудники
 app.use('/api/conversations', require('./routes/conversations')); // Прямые чаты
+app.use('/api/push', require('./routes/push')); // Push-уведомления
 
 // Health check
 app.get('/health', async (req, res) => {

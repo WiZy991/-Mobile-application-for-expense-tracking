@@ -2,6 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const { dbQuery } = require('../database/init');
 const { emitConversationMessage } = require('../socket');
+const { notifyChatMessage } = require('../services/pushService');
 
 const router = express.Router();
 
@@ -302,6 +303,17 @@ router.post('/:id/messages', authenticateAny, async (req, res) => {
     emitConversationMessage(conversationId, {
       ...newMsg,
       senderName: senderLabel,
+    });
+
+    // Push-уведомление участникам чата
+    const convInfo = await dbQuery('SELECT title FROM conversations WHERE id = $1', [conversationId]);
+    notifyChatMessage({
+      conversationId,
+      senderId: req.authUser.id,
+      senderType: req.authUser.type,
+      senderName: senderLabel,
+      message: message.trim(),
+      conversationTitle: shortenName(convInfo.rows[0]?.title) || 'Чат',
     });
 
     res.json({ success: true, message: newMsg });

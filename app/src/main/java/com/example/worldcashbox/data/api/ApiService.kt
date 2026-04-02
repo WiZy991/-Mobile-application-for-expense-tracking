@@ -292,4 +292,11 @@ interface ApiService {
         @Path("id") conversationId: Int,
         @Body request: SendDirectMessageRequest
     ): Response<Map<String, Any>>
+
+    // Push tokens
+    @POST("push/register")
+    suspend fun registerPushToken(@Body body: Map<String, String>): Response<Map<String, Any>>
+
+    @POST("push/unregister")
+    suspend fun unregisterPushToken(@Body body: Map<String, String>): Response<Map<String, Any>>
 }

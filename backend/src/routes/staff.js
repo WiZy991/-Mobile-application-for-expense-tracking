@@ -6,6 +6,7 @@ const { upload } = require('../middleware/upload');
 const path = require('path');
 const fs = require('fs');
 const { emitTicketMessage, emitTicketStatusChanged } = require('../socket');
+const { notifyTicketReply, notifyTicketStatus } = require('../services/pushService');
 
 const router = express.Router();
 
@@ -655,6 +656,10 @@ router.put('/support/tickets/:id/status', authenticateStaff, async (req, res) =>
 
     emitTicketStatusChanged(ticketId, status);
 
+    // Push-уведомление клиенту о смене статуса
+    const ticketForPush = await dbQuery('SELECT subject FROM support_tickets WHERE id = $1', [ticketId]);
+    notifyTicketStatus({ ticketId, newStatus: status, subject: ticketForPush.rows[0]?.subject });
+
     res.json({ 
       success: true,
       ticket: verifyResult.rows[0] 
@@ -830,6 +835,17 @@ router.post('/support/tickets/:id/messages', authenticateStaff, upload.array('fi
     console.log(`[Staff] Transaction committed for ticket ${ticketId}, message ${messageId}`);
 
     emitTicketMessage(ticketId, { id: messageId, ticketId, userType: 'support', userId: req.staff.id, message, createdAt: new Date().toISOString() });
+
+    // Push-уведомление клиенту о новом ответе
+    const ticketForPush = await dbQuery('SELECT subject FROM support_tickets WHERE id = $1', [ticketId]);
+    notifyTicketReply({
+      ticketId,
+      senderId: req.staff.id,
+      senderType: 'staff',
+      senderName: req.staff.name || 'Поддержка',
+      message,
+      subject: ticketForPush.rows[0]?.subject,
+    });
 
     res.json({ success: true });
   } catch (error) {

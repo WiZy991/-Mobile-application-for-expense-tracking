@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { createSBISTask } = require('./sbisProxy');
 const { emitTicketMessage } = require('../socket');
+const { notifyTicketReply } = require('../services/pushService');
 
 const router = express.Router();
 
@@ -701,6 +702,17 @@ router.post('/tickets/:id/messages', authenticateToken, (req, res, next) => {
     }
 
     emitTicketMessage(ticketId, { id: messageId, ticketId, userType: 'client', userId: req.userId, message, createdAt: new Date().toISOString() });
+
+    // Push-уведомление инженерам о новом сообщении клиента
+    const ticketForPush = await dbQuery('SELECT subject FROM support_tickets WHERE id = $1', [ticketId]);
+    notifyTicketReply({
+      ticketId,
+      senderId: req.userId,
+      senderType: 'client',
+      senderName: 'Клиент',
+      message,
+      subject: ticketForPush.rows[0]?.subject,
+    });
 
     res.json({ success: true });
   } catch (error) {

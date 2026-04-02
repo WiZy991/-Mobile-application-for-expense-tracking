@@ -1418,6 +1418,21 @@ async function createTables() {
       await createIndexIfNotExists(client, idx.name, idx.table, idx.columns);
     }
 
+    // Таблица токенов устройств для push-уведомлений
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS device_tokens (
+        id ${getPrimaryKeyType()}${isMySQL ? ` PRIMARY KEY` : ``},
+        user_id INTEGER NOT NULL,
+        user_type VARCHAR(20) NOT NULL,
+        token VARCHAR(500) NOT NULL,
+        platform VARCHAR(20) DEFAULT 'android',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(token)
+      )
+    `);
+    await createIndexIfNotExists(client, 'idx_device_tokens_user', 'device_tokens', 'user_id, user_type');
+
     if (isMySQL) {
       await client.query('COMMIT');
     } else {

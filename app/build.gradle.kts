@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -79,6 +80,10 @@ dependencies {
     
     // WebSocket (Socket.IO)
     implementation("io.socket:socket.io-client:2.1.1")
+
+    // Firebase
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
     
     // Testing
     testImplementation(libs.junit)

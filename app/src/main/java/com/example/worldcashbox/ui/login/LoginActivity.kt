@@ -157,6 +157,14 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun navigateToDashboard() {
+        // Создаём каналы уведомлений и регистрируем push-токен
+        com.example.worldcashbox.services.FCMService.createNotificationChannels(this)
+        try {
+            com.example.worldcashbox.services.PushTokenHelper.registerIfNeeded(this)
+        } catch (e: Exception) {
+            android.util.Log.e("Login", "Push token registration skipped", e)
+        }
+
         val userType = tokenManager.getUserType()
         val userRole = tokenManager.getUserRole()
         
