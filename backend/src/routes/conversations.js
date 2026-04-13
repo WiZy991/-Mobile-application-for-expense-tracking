@@ -91,7 +91,7 @@ router.post('/', authenticateAny, async (req, res) => {
         [conversationId, clientId]
       );
 
-      const managers = await dbQuery(`SELECT id FROM staff WHERE role = 'manager' AND is_active = true`);
+      const managers = await dbQuery(`SELECT id FROM staff WHERE role IN ('manager', 'director') AND is_active = true`);
       for (const mgr of managers.rows) {
         await dbQuery(
           `INSERT INTO conversation_participants (conversation_id, user_id, user_type, role) VALUES ($1, $2, 'staff', 'observer')`,
@@ -153,8 +153,8 @@ router.post('/', authenticateAny, async (req, res) => {
         );
       }
 
-      // Add managers as observers
-      const managers = await dbQuery(`SELECT id FROM staff WHERE role = 'manager' AND is_active = true`);
+      // Add managers/directors as observers
+      const managers = await dbQuery(`SELECT id FROM staff WHERE role IN ('manager', 'director') AND is_active = true`);
       for (const mgr of managers.rows) {
         await dbQuery(
           `INSERT INTO conversation_participants (conversation_id, user_id, user_type, role) VALUES ($1, $2, 'staff', 'observer')`,
@@ -243,6 +243,8 @@ router.get('/:id/messages', authenticateAny, async (req, res) => {
             CASE
               WHEN (SELECT role FROM staff WHERE id = dm.sender_id) = 'manager'
               THEN 'Менеджер'
+              WHEN (SELECT role FROM staff WHERE id = dm.sender_id) = 'director'
+              THEN 'Директор'
               ELSE (SELECT name FROM staff WHERE id = dm.sender_id)
             END
         END as sender_name
@@ -299,7 +301,11 @@ router.post('/:id/messages', authenticateAny, async (req, res) => {
     );
 
     const newMsg = result.rows[0];
-    const senderLabel = req.authUser.role === 'manager' ? 'Менеджер' : (req.authUser.name || 'Сотрудник');
+    const senderLabel = req.authUser.role === 'manager'
+      ? 'Менеджер'
+      : req.authUser.role === 'director'
+        ? 'Директор'
+        : (req.authUser.name || 'Сотрудник');
     emitConversationMessage(conversationId, {
       ...newMsg,
       senderName: senderLabel,

@@ -646,7 +646,7 @@ async function createTables() {
         name VARCHAR(255) NOT NULL,
         full_name VARCHAR(255),
         password_hash VARCHAR(255) NOT NULL,
-        role VARCHAR(50) NOT NULL CHECK (role IN ('manager', 'support', 'engineer')),
+        role VARCHAR(50) NOT NULL CHECK (role IN ('manager', 'director', 'support', 'engineer')),
         is_active BOOLEAN DEFAULT true,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -1030,6 +1030,35 @@ async function createTables() {
           END IF;
         END $$;
       `);
+    }
+
+    // Расширяем staff.role: добавляем director (как у существующих БД с CHECK)
+    try {
+      if (isMySQL) {
+        const [chkRows] = await client.query(`
+          SELECT CONSTRAINT_NAME FROM information_schema.table_constraints
+          WHERE table_schema = DATABASE() AND table_name = 'staff' AND constraint_type = 'CHECK'
+        `);
+        for (const row of chkRows || []) {
+          const cn = row.CONSTRAINT_NAME;
+          if (cn) {
+            await client.query(`ALTER TABLE staff DROP CHECK \`${cn}\``);
+          }
+        }
+        await client.query(`
+          ALTER TABLE staff ADD CONSTRAINT staff_role_check CHECK (role IN ('manager', 'director', 'support', 'engineer'))
+        `);
+        console.log('✅ staff.role CHECK updated (director)');
+      } else {
+        await client.query(`ALTER TABLE staff DROP CONSTRAINT IF EXISTS staff_role_check`);
+        await client.query(`
+          ALTER TABLE staff ADD CONSTRAINT staff_role_check
+          CHECK (role IN ('manager', 'director', 'support', 'engineer'))
+        `);
+        console.log('✅ staff.role CHECK updated (director)');
+      }
+    } catch (err) {
+      console.log('Note: staff.role CHECK (director) may already apply:', err.message);
     }
 
     // Обновляем constraint для support_messages, если нужно

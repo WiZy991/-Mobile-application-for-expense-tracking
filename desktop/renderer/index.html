@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http: https:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WorldCashBox Staff</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <section id="screen-login" class="screen">
+      <div class="login-card">
+        <h1>WorldCashBox</h1>
+        <p class="subtitle">Вход для инженеров и менеджеров</p>
+        <label>Адрес API (с /api в конце)</label>
+        <input type="url" id="api-base" placeholder="https://ваш-сервер.ru/api/" autocomplete="url" />
+        <label>Email</label>
+        <input type="email" id="login-email" autocomplete="username" />
+        <label>Пароль</label>
+        <input type="password" id="login-password" autocomplete="current-password" />
+        <p id="login-error" class="error" hidden></p>
+        <button type="button" id="btn-login" class="btn primary">Войти</button>
+      </div>
+    </section>
+
+    <section id="screen-main" class="screen hidden">
+      <aside class="sidebar">
+        <div class="brand">WorldCashBox</div>
+        <div id="user-badge" class="user-badge"></div>
+        <nav class="nav">
+          <button type="button" class="nav-btn active" data-view="tickets">Тикеты</button>
+          <button type="button" class="nav-btn" data-view="chats">Чаты</button>
+          <button type="button" class="nav-btn" data-view="analytics">Аналитика</button>
+        </nav>
+        <button type="button" id="btn-logout" class="btn ghost">Выйти</button>
+      </aside>
+      <main class="content">
+        <div id="view-tickets" class="view">
+          <header class="toolbar">
+            <h2>Тикеты</h2>
+            <div class="toolbar-actions" id="tickets-filters"></div>
+          </header>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Тема</th>
+                  <th>Клиент</th>
+                  <th>Статус</th>
+                  <th>Приоритет</th>
+                  <th>Дата</th>
+                </tr>
+              </thead>
+              <tbody id="tickets-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="view-ticket-detail" class="view hidden">
+          <header class="toolbar">
+            <button type="button" id="btn-back-tickets" class="btn ghost">← К списку</button>
+            <h2 id="ticket-detail-title">Тикет</h2>
+          </header>
+          <div class="detail-grid">
+            <div class="card" id="ticket-meta"></div>
+            <div class="card messages-card">
+              <h3>Сообщения</h3>
+              <div id="ticket-messages" class="messages"></div>
+              <div id="ticket-reply-box" class="reply-box hidden">
+                <textarea id="ticket-reply-text" rows="3" placeholder="Ответ в тикет…"></textarea>
+                <button type="button" id="btn-send-ticket-msg" class="btn primary">Отправить</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="view-chats" class="view hidden">
+          <header class="toolbar">
+            <h2>Чаты</h2>
+            <button type="button" id="btn-refresh-chats" class="btn ghost">Обновить</button>
+          </header>
+          <div class="split">
+            <ul id="chat-list" class="chat-list"></ul>
+            <div class="chat-pane">
+              <div id="chat-placeholder" class="muted">Выберите чат</div>
+              <div id="chat-active" class="hidden">
+                <h3 id="chat-active-title"></h3>
+                <div id="chat-messages" class="messages"></div>
+                <div class="reply-box">
+                  <textarea id="chat-input" rows="2" placeholder="Сообщение…"></textarea>
+                  <button type="button" id="btn-send-chat" class="btn primary">Отправить</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="view-analytics" class="view hidden">
+          <header class="toolbar">
+            <h2>Аналитика</h2>
+            <select id="analytics-period">
+              <option value="week">Неделя</option>
+              <option value="month" selected>Месяц</option>
+              <option value="quarter">Квартал</option>
+              <option value="year">Год</option>
+            </select>
+            <button type="button" id="btn-load-analytics" class="btn primary">Загрузить</button>
+          </header>
+          <div id="analytics-summary" class="stats-grid"></div>
+          <h3>Долгие задачи</h3>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr><th>#</th><th>Тема</th><th>Клиент</th><th>Минут</th><th>Статус</th></tr>
+              </thead>
+              <tbody id="analytics-top-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </section>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

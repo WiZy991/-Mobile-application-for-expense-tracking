@@ -63,7 +63,7 @@ function initSocket(httpServer) {
     });
 
     // Managers join a special room to receive all ticket events
-    if (socket.userRole === 'manager') {
+    if (socket.userRole === 'manager' || socket.userRole === 'director') {
       socket.join('managers');
     }
 

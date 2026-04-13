@@ -310,6 +310,55 @@ router.post('/tickets', authenticateToken, (req, res, next) => {
       }
     }
 
+    // Уведомления сотрудникам (десктоп / staff_notifications)
+    try {
+      const clientName = clientData?.name || 'Клиент';
+      const msgPreview = message
+        ? message.length > 200
+          ? message.substring(0, 200) + '…'
+          : message
+        : '';
+      const msgText = `${clientName} создал тикет #${ticket.id}: «${subject}»${msgPreview ? `\n\n${msgPreview}` : ''}`;
+
+      const assignedRow = await dbQuery('SELECT assigned_to FROM support_tickets WHERE id = $1', [ticket.id]);
+      const assignedTo = assignedRow.rows[0]?.assigned_to;
+
+      if (assignedTo) {
+        await dbQuery(
+          `INSERT INTO staff_notifications (staff_id, type, title, message, related_id, related_type)
+           VALUES ($1, 'ticket', 'Новый тикет', $2, $3, 'ticket')`,
+          [assignedTo, msgText, ticket.id]
+        );
+      } else {
+        const staffResult = await dbQuery(
+          `SELECT id FROM staff WHERE role IN ('support', 'engineer') AND is_active = true`,
+          []
+        );
+        for (const s of staffResult.rows) {
+          await dbQuery(
+            `INSERT INTO staff_notifications (staff_id, type, title, message, related_id, related_type)
+             VALUES ($1, 'ticket', 'Новый тикет', $2, $3, 'ticket')`,
+            [s.id, msgText, ticket.id]
+          );
+        }
+      }
+
+      const mgrResult = await dbQuery(
+        `SELECT id FROM staff WHERE role IN ('manager', 'director') AND is_active = true`,
+        []
+      );
+      for (const mgr of mgrResult.rows) {
+        if (assignedTo && mgr.id === assignedTo) continue;
+        await dbQuery(
+          `INSERT INTO staff_notifications (staff_id, type, title, message, related_id, related_type)
+           VALUES ($1, 'ticket', 'Новый тикет', $2, $3, 'ticket')`,
+          [mgr.id, msgText, ticket.id]
+        );
+      }
+    } catch (notifyErr) {
+      console.error('[Support] staff_notifications on new ticket:', notifyErr.message);
+    }
+
     res.json({
       success: true,
       ticket: {
@@ -684,7 +733,7 @@ router.post('/tickets/:id/messages', authenticateToken, (req, res, next) => {
 
       // Уведомляем всех менеджеров (наблюдатели видят все тикеты)
       const managersResult = await dbQuery(
-        `SELECT id FROM staff WHERE role = 'manager' AND is_active = true`,
+        `SELECT id FROM staff WHERE role IN ('manager', 'director') AND is_active = true`,
         []
       );
       for (const mgr of managersResult.rows) {

@@ -90,8 +90,8 @@ router.post('/register', async (req, res) => {
     // Нормализуем email (приводим к lowercase и убираем пробелы)
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Разрешаем роли: support, engineer, manager
-    const allowedRoles = ['support', 'engineer', 'manager'];
+    // Разрешаем роли: support, engineer, manager, director (директор — как менеджер, только наблюдение)
+    const allowedRoles = ['support', 'engineer', 'manager', 'director'];
     if (!allowedRoles.includes(role)) {
       return res.status(400).json({ error: `Роль должна быть одной из: ${allowedRoles.join(', ')}` });
     }
@@ -231,7 +231,7 @@ router.post('/auth', async (req, res) => {
 // Получить тикеты поддержки для сотрудников
 router.get('/support/tickets', authenticateStaff, async (req, res) => {
   try {
-    const allowedRoles = ['support', 'engineer', 'manager'];
+    const allowedRoles = ['support', 'engineer', 'manager', 'director'];
     if (!allowedRoles.includes(req.staff.role)) {
       return res.status(403).json({ error: 'Доступ запрещён для вашей роли' });
     }
@@ -288,7 +288,7 @@ router.get('/support/tickets', authenticateStaff, async (req, res) => {
 // Получить детальную информацию о тикете (для инженеров и менеджеров)
 router.get('/support/tickets/:id', authenticateStaff, async (req, res) => {
   try {
-    const allowedRoles = ['support', 'engineer', 'manager'];
+    const allowedRoles = ['support', 'engineer', 'manager', 'director'];
     if (!allowedRoles.includes(req.staff.role)) {
       return res.status(403).json({ error: 'Доступ запрещён для вашей роли' });
     }
@@ -805,7 +805,7 @@ router.post('/support/tickets/:id/messages', authenticateStaff, upload.array('fi
 
       // Уведомляем менеджеров-наблюдателей о новом ответе инженера
       const managersResult = await dbQuery(
-        `SELECT id FROM staff WHERE role = 'manager' AND is_active = true AND id != $1`,
+        `SELECT id FROM staff WHERE role IN ('manager', 'director') AND is_active = true AND id != $1`,
         [req.staff.id],
         connection
       );
@@ -868,14 +868,14 @@ router.post('/support/tickets/:id/messages', authenticateStaff, upload.array('fi
 // Аналитика задач для инженера (JIRA-стиль)
 router.get('/support/analytics', authenticateStaff, async (req, res) => {
   try {
-    const allowedRoles = ['support', 'engineer', 'manager'];
+    const allowedRoles = ['support', 'engineer', 'manager', 'director'];
     if (!allowedRoles.includes(req.staff.role)) {
       return res.status(403).json({ error: 'Доступ запрещён для вашей роли' });
     }
 
     const { period = 'month' } = req.query;
-    // Менеджер всегда видит все тикеты (assigned_to = 'all')
-    const assigned_to = req.staff.role === 'manager' ? 'all' : (req.query.assigned_to || 'me');
+    // Менеджер и директор всегда видят все тикеты (assigned_to = 'all')
+    const assigned_to = req.staff.role === 'manager' || req.staff.role === 'director' ? 'all' : (req.query.assigned_to || 'me');
     const staffId = assigned_to === 'me' ? req.staff.id : null;
 
     console.log(`[Analytics] Request: period=${period}, assigned_to=${assigned_to}, staffId=${staffId}`);

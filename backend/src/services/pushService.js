@@ -122,7 +122,7 @@ async function notifyTicketReply({ ticketId, senderId, senderType, senderName, m
       if (t.assigned_to) {
         recipients.push({ userId: t.assigned_to, userType: 'staff' });
       }
-      const managers = await dbQuery("SELECT id FROM staff WHERE role = 'manager' AND is_active = true");
+      const managers = await dbQuery("SELECT id FROM staff WHERE role IN ('manager', 'director') AND is_active = true");
       for (const m of managers.rows) {
         recipients.push({ userId: m.id, userType: 'staff' });
       }

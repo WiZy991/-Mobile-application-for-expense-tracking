@@ -1,0 +1,44 @@
+{
+  "name": "worldcashbox-staff-desktop",
+  "version": "1.0.0",
+  "description": "WorldCashBox — рабочее место инженера и менеджера (тикеты, чаты, аналитика)",
+  "main": "main.js",
+  "author": "WorldCashBox",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "build:win": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "ru.worldcashbox.staff.desktop",
+    "productName": "WorldCashBox Staff",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerLanguages": ["ru_RU", "en_US"],
+      "language": "1049"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  }
+}
